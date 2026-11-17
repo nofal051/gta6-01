@@ -1,0 +1,42 @@
+# BUILD LOG — Solmar Bay (gta6-01)
+
+## What was built
+Original 2D top-down open-world crime game "Solmar Bay" in plain
+JavaScript / Canvas 2D, no libraries, no network requests, all art and
+sound generated in code. City: seeded road grid, buildings, park, beach
+and waterfront. Systems: on-foot + driving (E to enter/steal cars),
+traffic AI, fleeing pedestrians, 0–5 star wanted system with chasing
+police cars and foot cops, 5-mission story chain for Mara Voss plus taxi
+fares and cash packages, pistol + melee combat, HUD with live minimap,
+title/pause/game-over screens, localStorage best cash, WebAudio synth
+SFX + bass music loop, deterministic `?shot=` staging for screenshots.
+
+Source split into one-job files under `game/src/` (see README for the
+layout). `main.ts` written by hand, adapting the starter's plumbing.
+
+## Verification
+- Headless Chromium renders of `?shot=title|play|chase|mission` all
+  produced real, readable gameplay frames (viewed: city, traffic,
+  police, HUD, minimap, mission banner). No console errors broke play.
+- Screenshots retaken after fixing staging (autopilot now follows
+  roads; chase retaken at seed 11 for a clean moving pursuit).
+- `main.ts` run twice into out1/out2 — `diff -r` clean: BYTE-IDENTICAL.
+  dossier.json 548,435 B, game/ 17 files / 92 KiB, 4 screenshots.
+- Kit check (`makefun.mjs check --worktree`): 4 passed, 0 failed,
+  16 skipped (transcript checks run by the site), 5 at-submission
+  (repo must be public / pushed / created after opening — user-only
+  steps, not yet done).
+
+## Screenshots (all 1280x720 JPEG, real renders)
+- 1-cover.jpg — driving in the city, 2 wanted stars, traffic, minimap (96,342 B)
+- 2-drive.jpg — 114 mph drive with two police cars on the tail, 5 stars (92,080 B)
+- 3-chase.jpg — police pursuit at 71 mph near the beach, 4 stars (84,526 B)
+- 4-mission.jpg — "MISSION COMPLETE +$150", beach/water edge, 114 mph (91,273 B)
+
+## Notes
+- No money spent, no paid APIs, nothing submitted.
+- README badges use placeholder `OWNER` — the user replaces it with
+  their real GitHub username when pushing.
+- Known minor: the staging autopilot sometimes ends a shot at low
+  speed against a building corner; live driving (player-steered) is
+  unaffected and the chosen frames all show the car clearly on a road.
