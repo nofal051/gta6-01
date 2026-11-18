@@ -1,12 +1,11 @@
 # Solmar Bay — Open-World Crime Game
 
-[![Made with make.fun](https://img.shields.io/badge/Made%20with-make.fun-blue)](https://make.fun)
-[![Competition](https://img.shields.io/badge/Competition-gta6--01-green)](https://make.fun/c/gta6-01)
-[![Owner](https://img.shields.io/badge/Owner-OWNER-orange)](https://github.com/OWNER/gta6-01)
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![rank](https://make.fun/badge/gta6-01/nofal051/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![reward](https://make.fun/badge/gta6-01/nofal051/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-> **Note:** the Owner badge above uses the placeholder `OWNER` — replace it
-> with your real GitHub username when you push this repo (the badge URLs
-> contain `OWNER` / `github.com/OWNER/gta6-01` for that reason).
+
+
 
 A complete 2D top-down open-world crime game, built from scratch in plain
 JavaScript on Canvas 2D — no libraries, no network requests, no borrowed
