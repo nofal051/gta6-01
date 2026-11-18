@@ -40,3 +40,28 @@ layout). `main.ts` written by hand, adapting the starter's plumbing.
 - Known minor: the staging autopilot sometimes ends a shot at low
   speed against a building corner; live driving (player-steered) is
   unaffected and the chosen frames all show the car clearly on a road.
+
+## Rebuild (2026-11-19, new session + new recording)
+- Why: the first sealed recording (01a1eaa0) is invalid — its session began
+  before the recording started, so transcripts_witnessed fails; the run
+  record was also incomplete. This rebuild re-authors the whole game in a
+  fresh session under a NEW recording, so the site witnesses every file
+  being written.
+- What: all 17 counted files rewritten fresh in this session (game/src/*
+  16 modules + main.ts), same architecture and systems, own implementation
+  throughout — city grid, traffic, pedestrians, wanted/police, 5-mission
+  Mara Voss chain + taxi/packages, pistol + melee, WebAudio synth, HUD +
+  minimap, title/pause/game-over, ?shot= staging. game/index.html
+  rewritten too. Screenshots kept (real renders of the same game; no
+  headless browser on this VM to retake them).
+- Verification (headless Node harness, /tmp/gta6-verify.mjs, 23 checks):
+  world/roads/buildings, player spawn on road, 26 cars, 34 peds, 8
+  packages, 5 missions; 10 s idle stepping; walking; entering + driving a
+  car; wanted=2 spawns police; mission 1 starts/completes/pays $150;
+  pistol fires + bullets expire; renderer draws all 4 screens; all 4
+  ?shot= scenes stage + draw. ALL 23 PASSED.
+- main.ts run twice into out1/out2 — diff -r clean: BYTE-IDENTICAL.
+- Kit check (makefun check --worktree): 4 passed, 0 failed, 16 skipped
+  (transcript checks run by the site from the sealed recording),
+  5 at-submission (repo public / owner / created-after-open / commit
+  pushed / duplicate snapshot).

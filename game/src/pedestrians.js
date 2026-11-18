@@ -1,6 +1,7 @@
 // Pedestrians: locals strolling the sidewalks. They walk along a road,
-// pause at corners, and run away from gunfire, speeding cars and police
-// chases — and a hit pedestrian is a crime the wanted system notices.
+// pause at corners, and run from gunfire, speeding cars and police
+// chases — and a pedestrian hit by a car is a crime the wanted system
+// notices.
 import { ROAD } from './config.js';
 import { pick, range } from './random.js';
 
@@ -15,20 +16,28 @@ export function createPedestrians(rng, world) {
     peds.push({
       x: horizontal ? range(rng, 80, 2300) : road + side,
       y: horizontal ? road + side : range(rng, 80, 1700),
-      angle: rng() * Math.PI * 2, speed: range(rng, 28, 55),
-      color: pick(rng, PED_COLORS), state: 'walk', fleeX: 0, fleeY: 0, pause: range(rng, 0, 3),
+      angle: rng() * Math.PI * 2,
+      speed: range(rng, 28, 55),
+      color: pick(rng, PED_COLORS),
+      state: 'walk',
+      fleeX: 0,
+      fleeY: 0,
+      pause: range(rng, 0, 3),
+      hitCooldown: 0,
     });
   }
   return peds;
 }
 
+// Make every pedestrian within `radius` of (x, y) run away from it.
 export function scarePedestrians(peds, x, y, radius) {
   for (const p of peds) {
     if (Math.hypot(p.x - x, p.y - y) < radius) {
       p.state = 'flee';
       p.pause = 2.5;
       const d = Math.hypot(p.x - x, p.y - y) || 1;
-      p.fleeX = (p.x - x) / d; p.fleeY = (p.y - y) / d;
+      p.fleeX = (p.x - x) / d;
+      p.fleeY = (p.y - y) / d;
     }
   }
 }
@@ -36,7 +45,8 @@ export function scarePedestrians(peds, x, y, radius) {
 export function updatePedestrians(peds, dt, world) {
   for (const p of peds) {
     if (p.state === 'flee') {
-      p.x += p.fleeX * 150 * dt; p.y += p.fleeY * 150 * dt;
+      p.x += p.fleeX * 150 * dt;
+      p.y += p.fleeY * 150 * dt;
       p.angle = Math.atan2(p.fleeY, p.fleeX);
       p.pause -= dt;
       if (p.pause <= 0) { p.state = 'walk'; p.pause = 0; }

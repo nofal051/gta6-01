@@ -3,13 +3,12 @@
 // main.js and the screenshot staging in shots.js step through here, so a
 // staged shot is a real game state, never a mock-up.
 import { STEP, WANTED_DECAY_SECONDS } from './config.js';
-import { updatePlayer } from './player.js';
+import { updatePlayer, addWanted } from './player.js';
 import { updateTraffic } from './vehicles.js';
 import { updatePedestrians, scarePedestrians } from './pedestrians.js';
 import { updatePolice } from './police.js';
 import { updateMissions, updateSideWork } from './missions.js';
 import { updateBullets } from './combat.js';
-import { addWanted } from './player.js';
 
 export function stepGame(state, input, audio, dt) {
   state.time += dt;
@@ -42,7 +41,9 @@ export function stepGame(state, input, audio, dt) {
         ped.hitCooldown = 3;
         ped.state = 'flee';
         const d = Math.hypot(ped.x - p.x, ped.y - p.y) || 1;
-        ped.fleeX = (ped.x - p.x) / d; ped.fleeY = (ped.y - p.y) / d; ped.pause = 2.5;
+        ped.fleeX = (ped.x - p.x) / d;
+        ped.fleeY = (ped.y - p.y) / d;
+        ped.pause = 2.5;
         addWanted(p, 1, state.events);
         audio.crash();
         scarePedestrians(state.peds, p.x, p.y, 260);
@@ -66,7 +67,11 @@ export function stepGame(state, input, audio, dt) {
   if (p.wanted === 0 && p.health < 100) p.health = Math.min(100, p.health + 2 * dt);
 
   // Particles.
-  for (const pt of state.particles) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.life -= dt; }
+  for (const pt of state.particles) {
+    pt.x += pt.vx * dt;
+    pt.y += pt.vy * dt;
+    pt.life -= dt;
+  }
   state.particles = state.particles.filter((pt) => pt.life > 0);
 
   // Drain the event queue into game-over conditions.

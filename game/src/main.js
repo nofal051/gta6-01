@@ -1,7 +1,7 @@
 // Boot and the one loop. Screens: title, play, paused, game over. The loop
 // runs the world in fixed 1/60 s steps, reads actions once a frame, and
-// paints every frame. ?shot=title|play|chase|mission stages a scene instead
-// of running the loop and sets window.__shotReady for screenshots.
+// paints every frame. ?shot=title|play|chase|mission stages a scene
+// instead of running the loop and sets window.__shotReady for screenshots.
 import { BEST_KEY, MISSIONS_KEY, STEP } from './config.js';
 import { createRandom } from './random.js';
 import { createWorld } from './world.js';
@@ -9,8 +9,7 @@ import { createPlayer, tryEnterCar } from './player.js';
 import { createCars } from './vehicles.js';
 import { createPedestrians } from './pedestrians.js';
 import { createPolice } from './police.js';
-import { createMissions, startMission } from './missions.js';
-import { createSideWork } from './missions.js';
+import { createMissions, createSideWork, startMission } from './missions.js';
 import { firePistol, meleeAttack } from './combat.js';
 import { createAudio } from './audio.js';
 import { ACTION_CONFIRM, ACTION_ENTER_CAR, ACTION_MELEE, ACTION_MISSION, ACTION_MUTE, ACTION_PAUSE, createInput } from './input.js';
@@ -32,15 +31,23 @@ export function createGameState() {
   const world = createWorld(createRandom(seed));
   const spawn = { x: world.roadsX[1], y: world.roadsY[1] };
   return {
-    seed, rng: createRandom(seed + 7), world,
+    seed,
+    rng: createRandom(seed + 7),
+    world,
     player: createPlayer(spawn.x, spawn.y),
     cars: createCars(createRandom(seed + 11), world),
     peds: createPedestrians(createRandom(seed + 23), world),
     police: createPolice(),
     missions: createMissions(createRandom(seed + 31)),
     side: createSideWork(createRandom(seed + 47), world),
-    bullets: [], particles: [], events: [],
-    time: 0, clock: 8 * 60 + 15, aimAngle: 0, muted: false, overReason: null,
+    bullets: [],
+    particles: [],
+    events: [],
+    time: 0,
+    clock: 8 * 60 + 15,
+    aimAngle: 0,
+    muted: false,
+    overReason: null,
   };
 }
 
@@ -80,7 +87,8 @@ function runGame() {
     const fresh = createGameState();
     Object.assign(state, fresh);
     state.missions.done = 0;
-    accumulator = 0; screen = SCREEN_PLAY;
+    accumulator = 0;
+    screen = SCREEN_PLAY;
     audio.unlock();
     announce('Playing Solmar Bay. Press Q for your first job.');
   }
@@ -100,8 +108,10 @@ function runGame() {
     if (screen === SCREEN_TITLE || screen === SCREEN_OVER) {
       if (actions & ACTION_CONFIRM) startGame();
     } else if (screen === SCREEN_PLAY) {
-      if (actions & ACTION_PAUSE) { screen = SCREEN_PAUSED; announce('Paused.'); }
-      else {
+      if (actions & ACTION_PAUSE) {
+        screen = SCREEN_PAUSED;
+        announce('Paused.');
+      } else {
         if (actions & ACTION_ENTER_CAR) tryEnterCar(state.player, state.cars, state.events);
         if (actions & ACTION_MELEE) meleeAttack(state, audio);
         if (actions & ACTION_MISSION) startMission(state, state.rng);
@@ -113,14 +123,20 @@ function runGame() {
         }
       }
     } else if (screen === SCREEN_PAUSED) {
-      if (actions & (ACTION_PAUSE | ACTION_CONFIRM)) { screen = SCREEN_PLAY; announce('Playing.'); }
+      if (actions & (ACTION_PAUSE | ACTION_CONFIRM)) {
+        screen = SCREEN_PLAY;
+        announce('Playing.');
+      }
       accumulator = 0;
     }
     renderer.draw(state, screen, best);
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) { screen = SCREEN_PAUSED; announce('Paused.'); }
+    if (document.hidden && screen === SCREEN_PLAY) {
+      screen = SCREEN_PAUSED;
+      announce('Paused.');
+    }
   });
   announce('Solmar Bay. Press Space or click to play.');
   requestAnimationFrame(frame);

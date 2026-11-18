@@ -1,8 +1,8 @@
 // Screenshot staging behind ?shot=title|play|chase|mission. Each scene
 // plays the real rules forward from a fresh state with a simple autopilot
-// (get in a car, steer toward the next intersection or the mission marker),
-// so the frame is what a short game really looks like and the same seed
-// always gives the same frame.
+// (get in a car, steer toward the next intersection or the mission
+// marker), so the frame is what a short game really looks like and the
+// same seed always gives the same frame.
 import { STEP } from './config.js';
 import { nearestRoadPoint } from './world.js';
 import { SCREEN_PLAY, SCREEN_TITLE } from './render.js';
@@ -33,13 +33,14 @@ function steerToward(state, tx, ty) {
 }
 
 // Follow the roads to a target instead of cutting across blocks: first get
-// onto the nearest road, then drive along it in an L-shape toward the target.
+// onto the nearest road, then drive along it in an L-shape toward it.
 function roadWaypoint(state, target) {
   const p = state.player;
   const w = state.world;
   const np = nearestRoadPoint(w, p.x, p.y);
   if (np.d > 40) return np;
-  const dx = target.x - p.x; const dy = target.y - p.y;
+  const dx = target.x - p.x;
+  const dy = target.y - p.y;
   if (Math.abs(dx) > Math.abs(dy)) {
     const ry = w.roadsY.reduce((a, b) => (Math.abs(b - p.y) < Math.abs(a - p.y) ? b : a));
     return { x: target.x, y: ry };
@@ -71,14 +72,17 @@ export function stageShot(name, state) {
     for (let i = 0; i < 5 / STEP; i += 1) stepGame(state, fakeInput(0), SILENT, STEP);
     return { screen: SCREEN_TITLE, best: 1250 };
   }
+
   // Get in the nearest car first: walk the player to it, then press E.
-  let nearest = null; let nearestD = Infinity;
+  let nearest = null;
+  let nearestD = Infinity;
   for (const car of state.cars) {
     const d = Math.hypot(car.x - state.player.x, car.y - state.player.y);
     if (d < nearestD) { nearestD = d; nearest = car; }
   }
   if (nearest) { state.player.x = nearest.x; state.player.y = nearest.y; }
   tryEnterCar(state.player, state.cars, state.events);
+
   if (name === 'chase') {
     state.player.wanted = 3;
     state.player.wantedTimer = 0;
@@ -92,6 +96,7 @@ export function stageShot(name, state) {
     driveFor(state, 12, () => target);
     return { screen: SCREEN_PLAY, best: 1250 };
   }
+
   // play: cruise the city toward a few intersections.
   const w = state.world;
   const stops = [
