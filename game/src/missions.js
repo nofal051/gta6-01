@@ -1,12 +1,16 @@
-// Missions and side work in Solmar Bay. A five-mission story chain for
-// Mara Voss, a fixer who runs the harbour: learn to drive, pick up a
-// package, deliver it against the clock, lose a police tail, then the
-// finale — lift the harbour ledger and get clear. Plus taxi fares (pick up
-// a waving local, drop them at the marker) and cash packages scattered
-// around the city.
+// Missions and side work.
+//
+// The story is five jobs for Mara Voss, a fixer who runs the harbour:
+// steal a car and reach the marina, pick up a package in the park,
+// deliver it to the harbour against the clock, shake a police tail,
+// then lift the harbour ledger from the east beach and get clear.
+// Between jobs there is paid side work: taxi fares for waving locals
+// and cash packages hidden around the city.
 import { MISSION_REWARDS, PACKAGE_REWARD, TAXI_FARE } from './config.js';
 import { nearestRoadPoint } from './world.js';
 
+// The story chain. `time` is a countdown in seconds, only where the job
+// has one. The payout lives here; config's MISSION_REWARDS mirrors it.
 export const MISSION_DEFS = [
   { name: 'First Wheels', giver: 'Mara Voss', text: 'Steal a car, drive to the blue marina marker.', reward: 150 },
   { name: 'The Pickup', giver: 'Mara Voss', text: 'On foot or by car, reach the package at the park and grab it.', reward: 250 },
@@ -15,7 +19,7 @@ export const MISSION_DEFS = [
   { name: 'The Ledger', giver: 'Mara Voss', text: 'Grab the ledger at the east beach, then reach the hideout. No timer — stay alive.', reward: 1000 },
 ];
 
-// One destination per mission, picked from fixed spots in the city.
+// One fixed destination per job, chosen from places in the city.
 function markerFor(state, index, rng) {
   const w = state.world;
   const spots = [
@@ -56,7 +60,7 @@ export function startMission(state, rng) {
   m.banner = `MISSION: ${def.name}`;
   m.bannerTimer = 3;
   if (m.index === 3) {
-    // The chase mission starts hot.
+    // The tail job starts hot, two stars already on the player.
     state.player.wanted = Math.max(state.player.wanted, 2);
     state.player.wantedTimer = 0;
   }
@@ -66,10 +70,11 @@ export function startMission(state, rng) {
 export function updateMissions(state, dt, rng, audio) {
   const m = state.missions;
   if (m.bannerTimer > 0) m.bannerTimer -= dt;
-  const p = state.player;
   if (!m.active) return;
+  const p = state.player;
   const def = MISSION_DEFS[m.index];
 
+  // A timed job fails when the clock runs out.
   if (m.timerMax > 0) {
     m.timer -= dt;
     if (m.timer <= 0) {
@@ -83,7 +88,7 @@ export function updateMissions(state, dt, rng, audio) {
   }
   if (!m.target) return;
 
-  // Mission 4 completes by losing the heat, not by arriving anywhere.
+  // The tail job is finished by losing the heat, not by arriving.
   if (m.index === 3) {
     if (p.wanted === 0) completeMission(state, audio);
     return;
@@ -107,10 +112,15 @@ export function completeMission(state, audio) {
     ? 'Story complete! You run Solmar Bay now. Taxi fares and packages still pay.'
     : `Job done. Press Q for the next job: ${MISSION_DEFS[m.index].name}.`;
   audio.cash();
-  try { window.localStorage.setItem('solmarbay.missions.v1', String(m.done)); } catch { /* ignore */ }
+  try {
+    window.localStorage.setItem('solmarbay.missions.v1', String(m.done));
+  } catch {
+    // Storage may be off; the count in memory is what matters in-run.
+  }
 }
 
-// --- Side work: taxi fares and cash packages -----------------------------
+// --- Side work: cash packages and taxi fares ---------------------------
+
 export function createSideWork(rng, world) {
   const packages = [];
   for (let i = 0; i < 8; i += 1) {
@@ -128,8 +138,10 @@ export function updateSideWork(state, dt, rng, audio) {
   const side = state.side;
   const p = state.player;
 
+  // Walk or drive over a cash package to pocket it.
   for (const pkg of side.packages) {
-    if (!pkg.taken && Math.hypot(p.x - pkg.x, p.y - pkg.y) < 34) {
+    if (pkg.taken) continue;
+    if (Math.hypot(p.x - pkg.x, p.y - pkg.y) < 34) {
       pkg.taken = true;
       p.cash += PACKAGE_REWARD;
       state.events.push({ type: 'cash', amount: PACKAGE_REWARD });
@@ -137,9 +149,10 @@ export function updateSideWork(state, dt, rng, audio) {
     }
   }
 
+  // A local waves for a cab near the player, once the cooldown is over
+  // and the player is in a car.
   side.taxiCooldown -= dt;
   if (!side.taxi && side.taxiCooldown <= 0 && p.car) {
-    // A local waves for a cab near the player.
     const spot = nearestRoadPoint(
       state.world,
       p.x + (rng() < 0.5 ? -300 : 300),
@@ -151,15 +164,20 @@ export function updateSideWork(state, dt, rng, audio) {
   const taxi = side.taxi;
   if (!taxi) return;
   taxi.timer -= dt;
-  if (taxi.timer <= 0) { side.taxi = null; side.taxiCooldown = 10; return; }
+  if (taxi.timer <= 0) {
+    side.taxi = null;
+    side.taxiCooldown = 10;
+    return;
+  }
   if (taxi.state === 'waiting') {
+    // Drive up to the waving local to pick them up.
     if (p.car && Math.hypot(p.x - taxi.x, p.y - taxi.y) < 60) {
-      const dest = nearestRoadPoint(state.world, 200 + rng() * 1900, 150 + rng() * 1400);
-      taxi.dest = dest;
+      taxi.dest = nearestRoadPoint(state.world, 200 + rng() * 1900, 150 + rng() * 1400);
       taxi.state = 'riding';
       state.events.push({ type: 'taxi-pickup' });
     }
   } else if (taxi.dest && p.car && Math.hypot(p.x - taxi.dest.x, p.y - taxi.dest.y) < 60) {
+    // Drop them at the marker and get paid.
     p.cash += TAXI_FARE;
     state.events.push({ type: 'cash', amount: TAXI_FARE });
     audio.cash();

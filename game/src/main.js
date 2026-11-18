@@ -1,7 +1,10 @@
-// Boot and the one loop. Screens: title, play, paused, game over. The loop
-// runs the world in fixed 1/60 s steps, reads actions once a frame, and
-// paints every frame. ?shot=title|play|chase|mission stages a scene
-// instead of running the loop and sets window.__shotReady for screenshots.
+// Boot and the one game loop.
+//
+// Screens: title, play, paused, game over. The loop runs the world in
+// fixed 1/60 s steps, reads each frame's actions once, and paints every
+// frame. With ?shot=title|play|chase|mission the game instead stages a
+// scene through shots.js and sets window.__shotReady once it is painted,
+// which is how the screenshots were taken.
 import { BEST_KEY, MISSIONS_KEY, STEP } from './config.js';
 import { createRandom } from './random.js';
 import { createWorld } from './world.js';
@@ -17,7 +20,9 @@ import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE }
 import { stageShot } from './shots.js';
 import { stepGame } from './update.js';
 
+// A tab that was hidden for a while must not simulate a huge catch-up.
 const MAX_FRAME = 0.25;
+
 const params = new URLSearchParams(window.location.search);
 const shot = params.get('shot');
 const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
@@ -27,6 +32,9 @@ const canvas = document.getElementById('game');
 const status = document.getElementById('status');
 const rng = createRandom(seed);
 
+// Build one fresh run of the game: a seeded city, the player on the
+// second road crossing, traffic, pedestrians, police, missions and
+// side work, all from their own slices of the seed.
 export function createGameState() {
   const world = createWorld(createRandom(seed));
   const spawn = { x: world.roadsX[1], y: world.roadsY[1] };
@@ -56,12 +64,30 @@ const renderer = createRenderer(canvas);
 const audio = createAudio();
 
 function readBest() {
-  try { return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0; } catch { return 0; }
-}
-function saveBest(value) {
-  try { window.localStorage.setItem(BEST_KEY, String(value)); } catch { /* storage off */ }
+  try {
+    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
+  } catch {
+    return 0;
+  }
 }
 
+function saveBest(value) {
+  try {
+    window.localStorage.setItem(BEST_KEY, String(value));
+  } catch {
+    // Storage off: the best is kept in memory for this session only.
+  }
+}
+
+function loadDoneMissions() {
+  try {
+    return Number.parseInt(window.localStorage.getItem(MISSIONS_KEY) ?? '0', 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Stage a screenshot scene and paint it twice, then signal readiness.
 function runShot(name) {
   const scene = stageShot(name, state);
   let painted = 0;
@@ -78,11 +104,14 @@ function runGame() {
   const input = createInput(canvas);
   let screen = SCREEN_TITLE;
   let best = readBest();
-  try { state.missions.done = Number.parseInt(window.localStorage.getItem(MISSIONS_KEY) ?? '0', 10) || 0; } catch { /* ignore */ }
+  state.missions.done = loadDoneMissions();
   let accumulator = 0;
   let last = performance.now();
 
-  function announce(message) { status.textContent = message; }
+  function announce(message) {
+    status.textContent = message;
+  }
+
   function startGame() {
     const fresh = createGameState();
     Object.assign(state, fresh);
@@ -92,10 +121,14 @@ function runGame() {
     audio.unlock();
     announce('Playing Solmar Bay. Press Q for your first job.');
   }
+
   function endGame(reason) {
     state.overReason = reason || state.overReason || 'wasted';
     screen = SCREEN_OVER;
-    if (state.player.cash > best) { best = state.player.cash; saveBest(best); }
+    if (state.player.cash > best) {
+      best = state.player.cash;
+      saveBest(best);
+    }
     announce(`Game over. Cash $${state.player.cash}. Best $${best}.`);
   }
 
@@ -104,7 +137,8 @@ function runGame() {
     accumulator += Math.min((now - last) / 1000, MAX_FRAME);
     last = now;
     const actions = input.takeActions();
-    if (actions & ACTION_MUTE) { state.muted = audio.toggleMute(); }
+    if (actions & ACTION_MUTE) state.muted = audio.toggleMute();
+
     if (screen === SCREEN_TITLE || screen === SCREEN_OVER) {
       if (actions & ACTION_CONFIRM) startGame();
     } else if (screen === SCREEN_PLAY) {
@@ -119,7 +153,10 @@ function runGame() {
         while (accumulator >= STEP) {
           const over = stepGame(state, input, audio, STEP);
           accumulator -= STEP;
-          if (over) { endGame(over); break; }
+          if (over) {
+            endGame(over);
+            break;
+          }
         }
       }
     } else if (screen === SCREEN_PAUSED) {
@@ -132,6 +169,7 @@ function runGame() {
     renderer.draw(state, screen, best);
   }
 
+  // Leaving the tab pauses the run rather than letting it run on.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;

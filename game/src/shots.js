@@ -1,8 +1,10 @@
-// Screenshot staging behind ?shot=title|play|chase|mission. Each scene
-// plays the real rules forward from a fresh state with a simple autopilot
-// (get in a car, steer toward the next intersection or the mission
-// marker), so the frame is what a short game really looks like and the
-// same seed always gives the same frame.
+// Screenshot staging behind ?shot=title|play|chase|mission.
+//
+// Each scene plays the real rules forward from a fresh state with a
+// simple autopilot: get in the nearest car, then steer toward the next
+// intersection or the mission marker, following the roads instead of
+// cutting across blocks. The frame is what a short real game looks
+// like, and the same seed always stages the same frame.
 import { STEP } from './config.js';
 import { nearestRoadPoint } from './world.js';
 import { SCREEN_PLAY, SCREEN_TITLE } from './render.js';
@@ -10,14 +12,21 @@ import { tryEnterCar } from './player.js';
 import { startMission } from './missions.js';
 import { stepGame } from './update.js';
 
+// The staging never makes a sound.
 const SILENT = { shot() {}, crash() {}, siren() {}, cash() {}, pickup() {}, fail() {}, engine() {} };
 
 function fakeInput(steer) {
   return {
     mouse: { x: 640, y: 360, down: false },
-    axes() { return { forward: 1, strafe: steer }; },
-    isDown() { return false; },
-    takeActions() { return 0; },
+    axes() {
+      return { forward: 1, strafe: steer };
+    },
+    isDown() {
+      return false;
+    },
+    takeActions() {
+      return 0;
+    },
   };
 }
 
@@ -29,11 +38,18 @@ function steerToward(state, tx, ty) {
   let diff = target - car.angle;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
-  return diff > 0.12 ? 1 : diff < -0.12 ? -1 : 0;
+  if (diff > 0.12) return 1;
+  if (diff < -0.12) return -1;
+  return 0;
 }
 
-// Follow the roads to a target instead of cutting across blocks: first get
-// onto the nearest road, then drive along it in an L-shape toward it.
+// The nearest road point in a straight line.
+function nearestBy(list, value) {
+  return list.reduce((a, b) => (Math.abs(b - value) < Math.abs(a - value) ? b : a));
+}
+
+// Pick a waypoint on the roads toward `target`: first get onto the
+// nearest road, then drive along it in an L-shape toward the target.
 function roadWaypoint(state, target) {
   const p = state.player;
   const w = state.world;
@@ -42,13 +58,12 @@ function roadWaypoint(state, target) {
   const dx = target.x - p.x;
   const dy = target.y - p.y;
   if (Math.abs(dx) > Math.abs(dy)) {
-    const ry = w.roadsY.reduce((a, b) => (Math.abs(b - p.y) < Math.abs(a - p.y) ? b : a));
-    return { x: target.x, y: ry };
+    return { x: target.x, y: nearestBy(w.roadsY, p.y) };
   }
-  const rx = w.roadsX.reduce((a, b) => (Math.abs(b - p.x) < Math.abs(a - p.x) ? b : a));
-  return { x: rx, y: target.y };
+  return { x: nearestBy(w.roadsX, p.x), y: target.y };
 }
 
+// Drive for `seconds`, steering toward whatever `targetFn` returns.
 function driveFor(state, seconds, targetFn) {
   const steps = Math.floor(seconds / STEP);
   for (let i = 0; i < steps; i += 1) {
@@ -56,7 +71,8 @@ function driveFor(state, seconds, targetFn) {
     const wp = roadWaypoint(state, target);
     const steer = steerToward(state, wp.x, wp.y);
     stepGame(state, fakeInput(steer), SILENT, STEP);
-    // Unstick: if the car is barely moving, point it straight at the target.
+    // Unstuck: if the car is barely moving, point it at the waypoint
+    // and give it some speed again.
     const car = state.player.car;
     if (car && Math.abs(car.speed) < 40 && i % 30 === 0) {
       car.angle = Math.atan2(wp.y - car.y, wp.x - car.x);
@@ -68,28 +84,39 @@ function driveFor(state, seconds, targetFn) {
 
 export function stageShot(name, state) {
   const rng = state.rng;
+
+  // The title screen: let the city live for five seconds behind it.
   if (name === 'title') {
     for (let i = 0; i < 5 / STEP; i += 1) stepGame(state, fakeInput(0), SILENT, STEP);
     return { screen: SCREEN_TITLE, best: 1250 };
   }
 
-  // Get in the nearest car first: walk the player to it, then press E.
+  // Every other shot starts in a car: walk the player to the nearest
+  // one and press E.
   let nearest = null;
   let nearestD = Infinity;
   for (const car of state.cars) {
     const d = Math.hypot(car.x - state.player.x, car.y - state.player.y);
-    if (d < nearestD) { nearestD = d; nearest = car; }
+    if (d < nearestD) {
+      nearestD = d;
+      nearest = car;
+    }
   }
-  if (nearest) { state.player.x = nearest.x; state.player.y = nearest.y; }
+  if (nearest) {
+    state.player.x = nearest.x;
+    state.player.y = nearest.y;
+  }
   tryEnterCar(state.player, state.cars, state.events);
 
   if (name === 'chase') {
+    // Three stars, then nine seconds of being hunted.
     state.player.wanted = 3;
     state.player.wantedTimer = 0;
     const w = state.world;
     driveFor(state, 9, () => ({ x: w.roadsX[4], y: w.roadsY[1] }));
     return { screen: SCREEN_PLAY, best: 1250 };
   }
+
   if (name === 'mission') {
     startMission(state, rng);
     const target = state.missions.target || { x: 1200, y: 800 };
@@ -97,7 +124,7 @@ export function stageShot(name, state) {
     return { screen: SCREEN_PLAY, best: 1250 };
   }
 
-  // play: cruise the city toward a few intersections.
+  // play: cruise the city between a few intersections, 22 seconds.
   const w = state.world;
   const stops = [
     { x: w.roadsX[4], y: w.roadsY[2] },

@@ -1,7 +1,10 @@
-// Rendering: everything the player sees, painted on one Canvas 2D. The
-// camera follows the player; the world is drawn in layers (ground, roads,
-// park and beach, buildings, props, markers, vehicles, people, effects)
-// and the HUD and menus are drawn on top in screen space.
+// Rendering — everything the player sees, painted on one Canvas 2D.
+//
+// The camera follows the player. The world is painted in layers: ground
+// (grass, park, beach, water), roads with dashed centrelines, buildings
+// with windows, trees and lamps, then the markers, vehicles, people,
+// bullets and particles. The HUD and the menus are drawn on top in
+// screen space.
 import { COLORS, ROAD, WORLD_H, WORLD_W } from './config.js';
 import { drawHUD } from './hud.js';
 
@@ -10,15 +13,16 @@ export const SCREEN_PLAY = 'play';
 export const SCREEN_PAUSED = 'paused';
 export const SCREEN_OVER = 'over';
 
+const VIEW_W = 1280;
+const VIEW_H = 720;
+
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
+  canvas.width = VIEW_W;
+  canvas.height = VIEW_H;
 
-  function resize() {
-    canvas.width = 1280;
-    canvas.height = 720;
-  }
-  resize();
-
+  // One car, drawn pointing along its angle: body, cabin, windshield,
+  // police lights and a gold outline when the player is driving it.
   function drawCar(c, isPlayer) {
     ctx.save();
     ctx.translate(c.x, c.y);
@@ -48,16 +52,28 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
-  function draw(state, screen, best) {
-    const p = state.player;
-    const camX = Math.max(640, Math.min(WORLD_W - 640, p.x));
-    const camY = Math.max(360, Math.min(WORLD_H - 360, p.y));
-    ctx.clearRect(0, 0, 1280, 720);
-    ctx.save();
-    ctx.translate(640 - camX, 360 - camY);
-    const w = state.world;
+  // A person: a coloured body circle with a head, plus a facing line
+  // for the player on foot.
+  function drawPerson(x, y, color, angle) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f2c89b';
+    ctx.beginPath();
+    ctx.arc(x, y - 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (angle !== undefined) {
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle) * 16, y + Math.sin(angle) * 16);
+      ctx.stroke();
+    }
+  }
 
-    // Ground: grass, park, beach, water.
+  function drawGround(w) {
     ctx.fillStyle = COLORS.grass;
     ctx.fillRect(0, 0, WORLD_W, WORLD_H);
     ctx.fillStyle = COLORS.park;
@@ -66,6 +82,7 @@ export function createRenderer(canvas) {
     ctx.fillRect(w.beach.x, w.beach.y, w.beach.w, w.beach.h);
     ctx.fillStyle = COLORS.water;
     ctx.fillRect(w.water.x, w.water.y, w.water.w, w.water.h);
+    // Little wave marks on the water.
     ctx.strokeStyle = 'rgba(255,255,255,0.5)';
     ctx.lineWidth = 2;
     for (let y = 40; y < WORLD_H; y += 90) {
@@ -74,19 +91,31 @@ export function createRenderer(canvas) {
       ctx.lineTo(w.water.x + 60, y + 14);
       ctx.stroke();
     }
+  }
 
-    // Roads and lane dashes.
+  function drawRoads(w) {
     ctx.fillStyle = COLORS.road;
     for (const rx of w.roadsX) ctx.fillRect(rx - ROAD / 2, 0, ROAD, WORLD_H);
     for (const ry of w.roadsY) ctx.fillRect(0, ry - ROAD / 2, WORLD_W, ROAD);
     ctx.strokeStyle = COLORS.roadLine;
     ctx.lineWidth = 3;
     ctx.setLineDash([18, 22]);
-    for (const rx of w.roadsX) { ctx.beginPath(); ctx.moveTo(rx, 0); ctx.lineTo(rx, WORLD_H); ctx.stroke(); }
-    for (const ry of w.roadsY) { ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(WORLD_W, ry); ctx.stroke(); }
+    for (const rx of w.roadsX) {
+      ctx.beginPath();
+      ctx.moveTo(rx, 0);
+      ctx.lineTo(rx, WORLD_H);
+      ctx.stroke();
+    }
+    for (const ry of w.roadsY) {
+      ctx.beginPath();
+      ctx.moveTo(0, ry);
+      ctx.lineTo(WORLD_W, ry);
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
+  }
 
-    // Buildings with windows.
+  function drawBuildings(w) {
     for (const b of w.buildings) {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(b.x + 5, b.y + 6, b.w, b.h);
@@ -103,8 +132,9 @@ export function createRenderer(canvas) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(b.x, b.y, b.w, 5);
     }
+  }
 
-    // Trees and lamps.
+  function drawProps(w) {
     for (const t of w.trees) {
       ctx.fillStyle = '#2e7d32';
       ctx.beginPath();
@@ -119,8 +149,10 @@ export function createRenderer(canvas) {
       ctx.arc(l.x, l.y, 3, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
 
-    // Cash packages.
+  function drawMarkers(state) {
+    // Unclaimed cash packages: gold squares with a dollar sign.
     for (const pkg of state.side.packages) {
       if (pkg.taken) continue;
       ctx.fillStyle = '#ffd23d';
@@ -129,8 +161,7 @@ export function createRenderer(canvas) {
       ctx.font = 'bold 12px sans-serif';
       ctx.fillText('$', pkg.x - 4, pkg.y + 4);
     }
-
-    // Mission marker (pulsing ring + arrow).
+    // The mission marker: a pulsing ring with an arrow above it.
     if (state.missions.target) {
       const t = state.missions.target;
       const pulse = 26 + Math.sin(state.time * 4) * 6;
@@ -147,8 +178,7 @@ export function createRenderer(canvas) {
       ctx.closePath();
       ctx.fill();
     }
-
-    // Taxi customer.
+    // The taxi customer, waiting or riding, with their destination ring.
     if (state.side.taxi) {
       const t = state.side.taxi;
       ctx.fillStyle = t.state === 'riding' ? '#2f7bff' : '#ffd23d';
@@ -167,19 +197,12 @@ export function createRenderer(canvas) {
         ctx.setLineDash([]);
       }
     }
+  }
 
-    // Vehicles, people, bullets, particles.
+  function drawActors(state) {
+    const p = state.player;
     for (const car of state.cars) drawCar(car, car === p.car);
-    for (const ped of state.peds) {
-      ctx.fillStyle = ped.color;
-      ctx.beginPath();
-      ctx.arc(ped.x, ped.y, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#f2c89b';
-      ctx.beginPath();
-      ctx.arc(ped.x, ped.y - 2, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    for (const ped of state.peds) drawPerson(ped.x, ped.y, ped.color);
     for (const cop of state.police.cops) {
       ctx.fillStyle = '#1d4fd9';
       ctx.beginPath();
@@ -189,6 +212,7 @@ export function createRenderer(canvas) {
       ctx.fillRect(cop.x - 6, cop.y - 12, 12, 4);
     }
     if (p.onFoot) {
+      // The player: a dark ring, a gold body, and a facing line.
       ctx.fillStyle = '#111';
       ctx.beginPath();
       ctx.arc(p.x, p.y, 11, 0, Math.PI * 2);
@@ -216,55 +240,80 @@ export function createRenderer(canvas) {
       ctx.fill();
       ctx.globalAlpha = 1;
     }
+  }
+
+  function drawTitle(best) {
+    ctx.fillStyle = 'rgba(8,12,28,0.72)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = '#ffd23d';
+    ctx.font = 'bold 84px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SOLMAR BAY', 640, 220);
+    ctx.fillStyle = '#fff';
+    ctx.font = '28px sans-serif';
+    ctx.fillText('An open-world crime story — drive, steal, run, get rich.', 640, 272);
+    ctx.font = '20px sans-serif';
+    ctx.fillStyle = '#cfe3ff';
+    ctx.fillText('WASD drive / walk   •   E enter & steal cars   •   Click shoot   •   F punch', 640, 340);
+    ctx.fillText('Q start a mission   •   P pause   •   M mute   •   Best cash saved', 640, 374);
+    ctx.fillStyle = '#ffd23d';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText(`Best cash: $${best}    •    Press SPACE or click to play`, 640, 440);
+    ctx.fillStyle = '#9fb4d8';
+    ctx.font = '16px sans-serif';
+    ctx.fillText('Original game — city, story and characters invented for this entry.', 640, 500);
+    ctx.textAlign = 'left';
+  }
+
+  function drawPaused() {
+    ctx.fillStyle = 'rgba(8,12,28,0.6)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 54px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', 640, 340);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('Press P or Esc to keep playing', 640, 390);
+    ctx.textAlign = 'left';
+  }
+
+  function drawOver(state, best) {
+    const p = state.player;
+    ctx.fillStyle = 'rgba(40,6,10,0.72)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = '#ff6b5e';
+    ctx.font = 'bold 64px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(state.overReason === 'arrested' ? 'BUSTED' : 'WASTED', 640, 300);
+    ctx.fillStyle = '#fff';
+    ctx.font = '26px sans-serif';
+    ctx.fillText(`Cash: $${p.cash}   •   Missions done: ${state.missions.done}   •   Best cash: $${best}`, 640, 360);
+    ctx.fillText('Press SPACE to play again', 640, 410);
+    ctx.textAlign = 'left';
+  }
+
+  function draw(state, screen, best) {
+    const p = state.player;
+    // The camera centres on the player but never shows past the map edge.
+    const camX = Math.max(640, Math.min(WORLD_W - 640, p.x));
+    const camY = Math.max(360, Math.min(WORLD_H - 360, p.y));
+    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+    ctx.save();
+    ctx.translate(640 - camX, 360 - camY);
+    const w = state.world;
+    drawGround(w);
+    drawRoads(w);
+    drawBuildings(w);
+    drawProps(w);
+    drawMarkers(state);
+    drawActors(state);
     ctx.restore();
 
     drawHUD(ctx, state, screen, best, camX, camY);
 
-    // Menus on top.
-    if (screen === SCREEN_TITLE) {
-      ctx.fillStyle = 'rgba(8,12,28,0.72)';
-      ctx.fillRect(0, 0, 1280, 720);
-      ctx.fillStyle = '#ffd23d';
-      ctx.font = 'bold 84px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('SOLMAR BAY', 640, 220);
-      ctx.fillStyle = '#fff';
-      ctx.font = '28px sans-serif';
-      ctx.fillText('An open-world crime story — drive, steal, run, get rich.', 640, 272);
-      ctx.font = '20px sans-serif';
-      ctx.fillStyle = '#cfe3ff';
-      ctx.fillText('WASD drive / walk   •   E enter & steal cars   •   Click shoot   •   F punch', 640, 340);
-      ctx.fillText('Q start a mission   •   P pause   •   M mute   •   Best cash saved', 640, 374);
-      ctx.fillStyle = '#ffd23d';
-      ctx.font = 'bold 26px sans-serif';
-      ctx.fillText(`Best cash: $${best}    •    Press SPACE or click to play`, 640, 440);
-      ctx.fillStyle = '#9fb4d8';
-      ctx.font = '16px sans-serif';
-      ctx.fillText('Original game — city, story and characters invented for this entry.', 640, 500);
-      ctx.textAlign = 'left';
-    } else if (screen === SCREEN_PAUSED) {
-      ctx.fillStyle = 'rgba(8,12,28,0.6)';
-      ctx.fillRect(0, 0, 1280, 720);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 54px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('PAUSED', 640, 340);
-      ctx.font = '22px sans-serif';
-      ctx.fillText('Press P or Esc to keep playing', 640, 390);
-      ctx.textAlign = 'left';
-    } else if (screen === SCREEN_OVER) {
-      ctx.fillStyle = 'rgba(40,6,10,0.72)';
-      ctx.fillRect(0, 0, 1280, 720);
-      ctx.fillStyle = '#ff6b5e';
-      ctx.font = 'bold 64px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(state.overReason === 'arrested' ? 'BUSTED' : 'WASTED', 640, 300);
-      ctx.fillStyle = '#fff';
-      ctx.font = '26px sans-serif';
-      ctx.fillText(`Cash: $${p.cash}   •   Missions done: ${state.missions.done}   •   Best cash: $${best}`, 640, 360);
-      ctx.fillText('Press SPACE to play again', 640, 410);
-      ctx.textAlign = 'left';
-    }
+    if (screen === SCREEN_TITLE) drawTitle(best);
+    else if (screen === SCREEN_PAUSED) drawPaused();
+    else if (screen === SCREEN_OVER) drawOver(state, best);
   }
 
   return { draw };

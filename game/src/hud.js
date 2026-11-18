@@ -1,13 +1,48 @@
-// HUD: cash, health, ammo, wanted stars, speed, the mission objective and
-// clock, plus a live minimap (player, cars, police, mission marker). The
-// minimap is drawn from the real state, so it always matches the world.
+// The HUD — everything on screen that is not the world itself.
+//
+// Cash, health, ammo, wanted stars, the clock, the mission objective,
+// the speedometer while driving, a controls hint, and a live minimap
+// drawn from the real state (player, cars, police, mission marker), so
+// it always matches the world. The title screen draws no HUD.
 import { WORLD_H, WORLD_W } from './config.js';
+
+// A five-pointed star at (x, y) with outer radius `r`.
+function drawStar(ctx, x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i += 1) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    const px = x + Math.cos(a) * rr;
+    const py = y + Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// One line of HUD text: trim it with an ellipsis until it fits `maxW`.
+function fitLine(ctx, text, x, y, maxW) {
+  let line = text;
+  while (line.length > 4 && ctx.measureText(line).width > maxW) {
+    line = `${line.slice(0, -5)}…`;
+  }
+  ctx.fillText(line, x, y);
+}
+
+// The in-game clock is minutes since midnight, shown as HH:MM.
+function clockText(clock) {
+  const mins = Math.floor(clock % 1440);
+  const hh = String(Math.floor(mins / 60)).padStart(2, '0');
+  const mm = String(mins % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
 
 export function drawHUD(ctx, state, screen, best, camX, camY) {
   const p = state.player;
   if (screen === 'title') return;
 
-  // Top bar: cash, missions, wanted stars, clock.
+  // Top bar: cash, missions done, wanted stars, clock, city name.
   ctx.fillStyle = 'rgba(8,12,28,0.55)';
   ctx.fillRect(0, 0, 1280, 46);
   ctx.fillStyle = '#7dff8a';
@@ -20,17 +55,14 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
     ctx.fillStyle = i < p.wanted ? '#ffd23d' : 'rgba(255,255,255,0.25)';
     drawStar(ctx, 330 + i * 30, 22, 11);
   }
-  const mins = Math.floor(state.clock % 1440);
-  const hh = String(Math.floor(mins / 60)).padStart(2, '0');
-  const mm = String(mins % 60).padStart(2, '0');
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 22px sans-serif';
-  ctx.fillText(`${hh}:${mm}`, 560, 32);
+  ctx.fillText(clockText(state.clock), 560, 32);
   ctx.font = '16px sans-serif';
   ctx.fillStyle = '#cfe3ff';
   ctx.fillText('SOLMAR BAY', 640, 30);
 
-  // Health + ammo, bottom left.
+  // Health bar and ammo, bottom left.
   ctx.fillStyle = 'rgba(8,12,28,0.55)';
   ctx.fillRect(14, 648, 250, 58);
   ctx.fillStyle = '#ff6b5e';
@@ -42,7 +74,7 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
   ctx.fillText(`HEALTH ${Math.ceil(p.health)}`, 24, 694);
   ctx.fillText(`AMMO ${p.ammo}`, 150, 694);
 
-  // Speed, bottom right (when driving).
+  // Speedometer, bottom right, only while driving.
   if (!p.onFoot && p.car) {
     ctx.fillStyle = 'rgba(8,12,28,0.55)';
     ctx.fillRect(1060, 648, 206, 58);
@@ -54,7 +86,8 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
     ctx.fillText(p.car.name || 'Car', 1080, 700);
   }
 
-  // Mission objective, top left under the bar.
+  // Mission objective, top left under the bar, with the timer when
+  // the active job has one.
   ctx.fillStyle = 'rgba(8,12,28,0.55)';
   ctx.fillRect(14, 56, 430, 54);
   ctx.fillStyle = '#2f7bff';
@@ -62,14 +95,14 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
   ctx.fillText(state.missions.active ? 'MISSION' : 'FREE ROAM', 24, 76);
   ctx.fillStyle = '#fff';
   ctx.font = '15px sans-serif';
-  wrapText(ctx, state.missions.text, 24, 96, 410);
+  fitLine(ctx, state.missions.text, 24, 96, 410);
   if (state.missions.timerMax > 0 && state.missions.active) {
     ctx.fillStyle = state.missions.timer < 15 ? '#ff6b5e' : '#ffd23d';
     ctx.font = 'bold 18px sans-serif';
     ctx.fillText(`⏱ ${Math.ceil(state.missions.timer)}s`, 380, 76);
   }
 
-  // Banner (mission complete / failed).
+  // A big centre banner while a mission starts, completes or fails.
   if (state.missions.bannerTimer > 0) {
     ctx.fillStyle = 'rgba(8,12,28,0.75)';
     ctx.fillRect(390, 300, 500, 64);
@@ -80,24 +113,24 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
     ctx.textAlign = 'left';
   }
 
-  // Controls hint, bottom centre.
+  // Controls hint along the bottom.
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = '14px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('WASD move/drive  •  E car  •  Click shoot  •  F punch  •  Q mission  •  P pause  •  M mute', 640, 712);
   ctx.textAlign = 'left';
 
-  // Minimap, top right.
+  // Minimap, top right: roads, sea, mission marker, cars, player.
   const mw = 190;
   const mh = 140;
   const mx = 1280 - mw - 14;
   const my = 56;
+  const sx = mw / WORLD_W;
+  const sy = mh / WORLD_H;
   ctx.fillStyle = 'rgba(8,12,28,0.7)';
   ctx.fillRect(mx - 4, my - 4, mw + 8, mh + 8);
   ctx.fillStyle = '#22301f';
   ctx.fillRect(mx, my, mw, mh);
-  const sx = mw / WORLD_W;
-  const sy = mh / WORLD_H;
   ctx.fillStyle = '#3a3f46';
   for (const rx of state.world.roadsX) ctx.fillRect(mx + rx * sx - 2, my, 4, mh);
   for (const ry of state.world.roadsY) ctx.fillRect(mx, my + ry * sy, mw, 4);
@@ -120,31 +153,10 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
   ctx.strokeStyle = '#fff';
   ctx.stroke();
 
-  // Muted note.
+  // Muted note under the minimap.
   if (state.muted) {
     ctx.fillStyle = '#fff';
     ctx.font = '16px sans-serif';
     ctx.fillText('MUTED', 1180, 230);
   }
-}
-
-function drawStar(ctx, x, y, r) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i += 1) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rr = i % 2 === 0 ? r : r * 0.45;
-    const px = x + Math.cos(a) * rr;
-    const py = y + Math.sin(a) * rr;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fill();
-}
-
-function wrapText(ctx, text, x, y, maxW) {
-  // One HUD line: shorten with an ellipsis until it fits the panel.
-  let line = text;
-  while (line.length > 4 && ctx.measureText(line).width > maxW) line = `${line.slice(0, -5)}…`;
-  ctx.fillText(line, x, y);
 }

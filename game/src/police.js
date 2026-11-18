@@ -1,14 +1,26 @@
-// The wanted system and the police. Stars 0–5: the higher the level, the
-// more police cars and foot cops spawn and the harder they chase. Police
-// cars ram the player's car; foot cops chase on foot and arrest (game over
-// at 3+ stars if they catch you standing still) or punch you down. Lay
-// low — no crime, out of sight — and the heat decays on its own.
+// The wanted system and the police who answer it.
+//
+// Stars run 0–5. More stars mean more police cars and more foot cops,
+// and the cars chase harder. A police car rams the player's car; a foot
+// cop runs the player down on foot, and at three stars or more, catching
+// a weakened player on foot — or a player sitting still in a car — is an
+// arrest. Keep clean and out of sight and the heat fades, one star at a
+// time, until the police give up and drive away.
 import { WANTED_DECAY_SECONDS } from './config.js';
 import { makeCar } from './vehicles.js';
 import { nearestRoadPoint } from './world.js';
 
 export function createPolice() {
   return { cars: [], cops: [], sirenTimer: 0 };
+}
+
+// How many police cars and foot cops a wanted level calls for.
+function wantedForce(stars) {
+  if (stars === 0) return { cars: 0, cops: 0 };
+  if (stars <= 2) return { cars: 1, cops: 1 };
+  if (stars <= 3) return { cars: 2, cops: 2 };
+  if (stars <= 4) return { cars: 3, cops: 2 };
+  return { cars: 3, cops: 3 };
 }
 
 function spawnPoliceCar(state, rng) {
@@ -18,7 +30,13 @@ function spawnPoliceCar(state, rng) {
     p.x + (rng() < 0.5 ? -520 : 520),
     p.y + (rng() < 0.5 ? -380 : 380),
   );
-  const car = makeCar(900 + state.police.cars.length + Math.floor(rng() * 50), spot.x, spot.y, 0, { rng, police: true });
+  const car = makeCar(
+    900 + state.police.cars.length + Math.floor(rng() * 50),
+    spot.x,
+    spot.y,
+    0,
+    { rng, police: true },
+  );
   car.color = '#1d4fd9';
   car.speed = 0;
   car.driver = 'police';
@@ -52,25 +70,26 @@ export function updatePolice(state, dt, rng, audio) {
     }
   }
 
-  const wantCars = wanted === 0 ? 0 : wanted <= 2 ? 1 : wanted <= 3 ? 2 : 3;
-  const wantCops = wanted === 0 ? 0 : wanted <= 2 ? 1 : wanted <= 4 ? 2 : 3;
-  while (state.police.cars.length < wantCars) spawnPoliceCar(state, rng);
-  while (state.police.cops.length < wantCops) spawnCop(state, rng);
+  // Bring the force up to strength for the current wanted level.
+  const force = wantedForce(wanted);
+  while (state.police.cars.length < force.cars) spawnPoliceCar(state, rng);
+  while (state.police.cops.length < force.cops) spawnCop(state, rng);
 
+  // Heat off entirely: the police leave and their cars despawn.
   if (wanted === 0) {
-    // Heat off: the police drive away and despawn.
     state.police.cars.length = 0;
     state.police.cops.length = 0;
     state.cars = state.cars.filter((c) => !c.police);
   }
 
+  // A siren wail every couple of seconds while wanted.
   state.police.sirenTimer -= dt;
   if (wanted > 0 && state.police.sirenTimer <= 0) {
     audio.siren();
     state.police.sirenTimer = 2.4;
   }
 
-  // Police cars chase the player and ram.
+  // Police cars steer toward the player and ram.
   for (const car of state.police.cars) {
     const dx = p.x - car.x;
     const dy = p.y - car.y;
@@ -84,16 +103,21 @@ export function updatePolice(state, dt, rng, audio) {
     car.x += Math.cos(car.angle) * car.speed * dt;
     car.y += Math.sin(car.angle) * car.speed * dt;
     if (dist < 52) {
-      if (p.onFoot) p.health -= 26 * dt;
-      else if (p.car) { p.car.speed *= 0.92; p.health -= 4 * dt; }
+      if (p.onFoot) {
+        p.health -= 26 * dt;
+      } else if (p.car) {
+        p.car.speed *= 0.92;
+        p.health -= 4 * dt;
+      }
       if (Math.random() < dt * 2) {
         state.particles.push({ x: car.x, y: car.y, vx: 0, vy: 0, life: 0.3, color: '#ffd23d', size: 5 });
       }
     }
   }
 
-  // Foot cops chase; catching a wanted player on foot hurts, and at 3+
-  // stars with low health it is an arrest.
+  // Foot cops run the player down. Close in on foot, they beat the
+  // player down; at three stars with low health that is an arrest, and
+  // a player sitting still in a car is arrested on the spot.
   for (const cop of state.police.cops) {
     const dx = p.x - cop.x;
     const dy = p.y - cop.y;
@@ -110,6 +134,8 @@ export function updatePolice(state, dt, rng, audio) {
       }
     }
   }
+
+  // Dead cops leave; police cars that are no longer tracked leave too.
   state.police.cops = state.police.cops.filter((c) => c.health > 0);
   state.cars = state.cars.filter((c) => !c.police || state.police.cars.includes(c));
 }
