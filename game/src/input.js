@@ -2,15 +2,27 @@
 //
 // Keys are tracked by `code`, so WASD and the arrow keys both drive.
 // The mouse position is kept in canvas pixels for aiming the pistol.
-// Actions (E, Q, F, P, M, Space, Enter, Esc) are edge-triggered:
-// takeActions() returns the actions pressed since the last call and
-// clears them, so one press never fires twice.
+// Actions (E, Q, F, P, M, Space, Enter, Esc, and the round-two keys
+// R for radio, G for quick-save, H for the horn, digits for garage
+// and save slots) are edge-triggered: takeActions() returns the
+// actions pressed since the last call and clears them, so one press
+// never fires twice.
+//
+// Digits do double duty by design: on the title screen they load save
+// slots, in the open garage they buy upgrades. main.js decides which
+// meaning applies from the screen it is on.
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
 export const ACTION_ENTER_CAR = 4;
 export const ACTION_MELEE = 8;
 export const ACTION_MUTE = 16;
 export const ACTION_MISSION = 32;
+export const ACTION_RADIO = 64;
+export const ACTION_SAVE = 128;
+export const ACTION_HORN = 256;
+export const ACTION_SLOT1 = 512;
+export const ACTION_SLOT2 = 1024;
+export const ACTION_SLOT3 = 2048;
 
 // Which key codes raise which action, on a fresh (non-repeat) press.
 const KEY_ACTIONS = {
@@ -22,6 +34,15 @@ const KEY_ACTIONS = {
   KeyM: ACTION_MUTE,
   KeyF: ACTION_MELEE,
   KeyQ: ACTION_MISSION,
+  KeyR: ACTION_RADIO,
+  KeyG: ACTION_SAVE,
+  KeyH: ACTION_HORN,
+  Digit1: ACTION_SLOT1,
+  Digit2: ACTION_SLOT2,
+  Digit3: ACTION_SLOT3,
+  Numpad1: ACTION_SLOT1,
+  Numpad2: ACTION_SLOT2,
+  Numpad3: ACTION_SLOT3,
 };
 
 // Keys whose default browser behaviour would fight the game.

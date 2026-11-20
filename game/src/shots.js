@@ -5,15 +5,24 @@
 // intersection or the mission marker, following the roads instead of
 // cutting across blocks. The frame is what a short real game looks
 // like, and the same seed always stages the same frame.
+//
+// Round two stages the new systems too: the title sits at dusk, the
+// chase is a four-star night storm with the helicopter overhead, and
+// the mission shot runs Ilsa Crane's airfield job in daylight.
 import { STEP } from './config.js';
 import { nearestRoadPoint } from './world.js';
 import { SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 import { tryEnterCar } from './player.js';
 import { startMission } from './missions.js';
 import { stepGame } from './update.js';
+import { setWeather } from './weather.js';
 
 // The staging never makes a sound.
-const SILENT = { shot() {}, crash() {}, siren() {}, cash() {}, pickup() {}, fail() {}, engine() {} };
+const SILENT = {
+  shot() {}, crash() {}, siren() {}, cash() {}, pickup() {}, fail() {},
+  engine() {}, thunder() {}, explosion() {}, rotor() {}, staticBurst() {},
+  playNote() {}, horn() {},
+};
 
 function fakeInput(steer) {
   return {
@@ -43,7 +52,7 @@ function steerToward(state, tx, ty) {
   return 0;
 }
 
-// The nearest road point in a straight line.
+// The nearest road centreline to `value` in a list of them.
 function nearestBy(list, value) {
   return list.reduce((a, b) => (Math.abs(b - value) < Math.abs(a - value) ? b : a));
 }
@@ -82,17 +91,8 @@ function driveFor(state, seconds, targetFn) {
   }
 }
 
-export function stageShot(name, state) {
-  const rng = state.rng;
-
-  // The title screen: let the city live for five seconds behind it.
-  if (name === 'title') {
-    for (let i = 0; i < 5 / STEP; i += 1) stepGame(state, fakeInput(0), SILENT, STEP);
-    return { screen: SCREEN_TITLE, best: 1250 };
-  }
-
-  // Every other shot starts in a car: walk the player to the nearest
-  // one and press E.
+// Walk the player to the nearest car and press E, the way a player would.
+function getInNearestCar(state) {
   let nearest = null;
   let nearestD = Infinity;
   for (const car of state.cars) {
@@ -107,10 +107,28 @@ export function stageShot(name, state) {
     state.player.y = nearest.y;
   }
   tryEnterCar(state.player, state.cars, state.events);
+}
+
+export function stageShot(name, state) {
+  const rng = state.rng;
+
+  // The title screen at dusk: let the city live for five seconds
+  // behind it, lamps coming on as the light fades.
+  if (name === 'title') {
+    state.clock = 19 * 60 + 20;
+    setWeather(state.weather, 'clear');
+    for (let i = 0; i < 5 / STEP; i += 1) stepGame(state, fakeInput(0), SILENT, STEP);
+    return { screen: SCREEN_TITLE, best: 1250 };
+  }
+
+  getInNearestCar(state);
 
   if (name === 'chase') {
-    // Three stars, then nine seconds of being hunted.
-    state.player.wanted = 3;
+    // Four stars under a night storm: the helicopter is overhead,
+    // the headlights are on, the rain is falling, roadblocks go up.
+    state.clock = 22 * 60;
+    setWeather(state.weather, 'storm');
+    state.player.wanted = 4;
     state.player.wantedTimer = 0;
     const w = state.world;
     driveFor(state, 9, () => ({ x: w.roadsX[4], y: w.roadsY[1] }));
@@ -118,13 +136,22 @@ export function stageShot(name, state) {
   }
 
   if (name === 'mission') {
+    // Ilsa Crane's airfield run, job six: twelve seconds of driving
+    // toward the runway with the mission marker and timer on the HUD.
+    state.clock = 10 * 60;
+    setWeather(state.weather, 'clear');
+    state.missions.index = 5;
+    state.missions.done = 5;
     startMission(state, rng);
     const target = state.missions.target || { x: 1200, y: 800 };
     driveFor(state, 12, () => target);
     return { screen: SCREEN_PLAY, best: 1250 };
   }
 
-  // play: cruise the city between a few intersections, 22 seconds.
+  // play: cruise the city between a few intersections in daylight,
+  // 22 seconds, traffic and pedestrians all around.
+  state.clock = 10 * 60;
+  setWeather(state.weather, 'clear');
   const w = state.world;
   const stops = [
     { x: w.roadsX[4], y: w.roadsY[2] },

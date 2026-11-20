@@ -1,10 +1,15 @@
 // One fixed step of the whole game.
 //
-// stepGame advances the clock, the player, traffic, pedestrians, the
-// police, missions, side work, bullets and particles, then drains the
-// event queue into game-over conditions. Both the live loop in main.js
-// and the screenshot staging in shots.js step through here, so a staged
-// screenshot is a real game state, never a mock-up.
+// stepGame advances the clock, the day/night cycle and the weather,
+// the player, traffic, pedestrians, the police (with their helicopter
+// and roadblocks), missions, side work, the new activities, bullets
+// and particles, then drains the event queue into game-over
+// conditions. Both the live loop in main.js and the screenshot staging
+// in shots.js step through here, so a staged screenshot is a real game
+// state, never a mock-up.
+//
+// The garage menu freezes driving input while it is open — the car is
+// parked in the shop — but the rest of the city keeps moving.
 import { STEP, WANTED_DECAY_SECONDS } from './config.js';
 import { updatePlayer, addWanted } from './player.js';
 import { updateTraffic } from './vehicles.js';
@@ -12,12 +17,21 @@ import { updatePedestrians, scarePedestrians } from './pedestrians.js';
 import { updatePolice } from './police.js';
 import { updateMissions, updateSideWork } from './missions.js';
 import { updateBullets } from './combat.js';
+import { updateDayNight } from './daynight.js';
+import { gripFactor, updateWeather } from './weather.js';
+import { updateRadio } from './radio.js';
+import { updateActivities } from './activities.js';
+import { carInGarage } from './garage.js';
 
 export function stepGame(state, input, audio, dt) {
   state.time += dt;
   // The in-game clock runs twice as fast as real time.
   state.clock += dt * 2;
   const p = state.player;
+
+  updateDayNight(state.daynight, state.clock, dt);
+  updateWeather(state.weather, state.rng, dt);
+  if (state.weather.thunder) audio.thunder();
 
   // Aim follows the mouse: screen position to world position through
   // the camera. On foot, the player faces where they aim.
@@ -30,13 +44,35 @@ export function stepGame(state, input, audio, dt) {
     if (p.onFoot) p.angle = state.aimAngle;
   }
 
-  updatePlayer(p, input, state.world, state.cars, dt, state.events, audio);
+  // The garage menu parks the car: no driving input gets through.
+  // Esc closes the shop (main.js sets dismissed); the menu only opens
+  // again once the car has been driven out and back in.
+  const parkedInShop = p.car && carInGarage(state.garage, p.car) && Math.abs(p.car.speed) < 12;
+  if (!parkedInShop) {
+    state.garage.menuOpen = false;
+    state.garage.dismissed = false;
+  } else if (!state.garage.dismissed) {
+    state.garage.menuOpen = true;
+  }
+  const driveInput = state.garage.menuOpen
+    ? { axes: () => ({ forward: 0, strafe: 0 }), isDown: () => false, mouse: input ? input.mouse : null }
+    : input;
+
+  const grip = gripFactor(state.weather);
+  updatePlayer(p, driveInput, state.world, state.cars, dt, state.events, audio, { grip });
   updateTraffic(state.cars, state.world, dt, state.rng);
-  updatePedestrians(state.peds, dt, state.world);
+  updatePedestrians(state.peds, dt, state.world, state.rng);
   updatePolice(state, dt, state.rng, audio);
   updateMissions(state, dt, state.rng, audio);
   updateSideWork(state, dt, state.rng, audio);
+  updateActivities(state, dt, state.rng, audio);
   updateBullets(state, state.world, dt);
+  updateRadio(state.radio, audio, dt, !p.onFoot && !!p.car, state.muted);
+
+  // The muzzle flash lives for a blink and then it is gone.
+  if (state.muzzle && state.muzzle.life > 0) state.muzzle.life -= dt;
+  if (state.saveNoticeTimer > 0) state.saveNoticeTimer -= dt;
+  if (state.garage.messageTimer > 0) state.garage.messageTimer -= dt;
 
   // Running a pedestrian over at speed is a crime — once per person
   // per hit, guarded by a short cooldown on each pedestrian.
@@ -76,13 +112,22 @@ export function stepGame(state, input, audio, dt) {
     p.health = Math.min(100, p.health + 2 * dt);
   }
 
-  // Particles drift and fade.
+  // Particles drift and fade; smoke rises, flame flickers upward.
   for (const pt of state.particles) {
     pt.x += pt.vx * dt;
     pt.y += pt.vy * dt;
+    if (pt.kind === 'smoke') pt.y -= 24 * dt;
+    if (pt.kind === 'flame') pt.y -= 12 * dt;
     pt.life -= dt;
   }
   state.particles = state.particles.filter((pt) => pt.life > 0);
+
+  // Skid marks fade where the cars left them.
+  for (const car of state.cars) {
+    if (!car.skidTrail) continue;
+    for (const skid of car.skidTrail) skid.life -= dt * 0.5;
+    car.skidTrail = car.skidTrail.filter((s) => s.life > 0);
+  }
 
   // Drain the event queue: an arrest ends the run here.
   for (const ev of state.events) {

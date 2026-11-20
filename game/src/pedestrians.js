@@ -4,24 +4,55 @@
 // Gunfire, a speeding car or a police chase nearby sends them running
 // away from the trouble. A pedestrian hit by a car is a crime, and the
 // wanted system is told about it by the step that caused the hit.
+//
+// Locals come in kinds now: walkers amble, joggers move faster and
+// further, harbour workers in hi-vis stick near the port, and
+// tourists cluster near the beach. Kind changes speed and shirt, not
+// the rules: everyone flees the same way.
 import { ROAD } from './config.js';
 import { pick, range } from './random.js';
 
-const SHIRTS = ['#e8a33d', '#3da3d9', '#d93d7a', '#7ad93d', '#e8e8e8', '#8a5a2e', '#5a2ed9'];
+const SHIRTS = {
+  walker: ['#e8a33d', '#3da3d9', '#d93d7a', '#7ad93d', '#e8e8e8'],
+  jogger: ['#ff5a4d', '#2fd9c9', '#f2f2f2'],
+  worker: ['#ff8c1a', '#ffd23d'],
+  tourist: ['#ff9ecf', '#7ad9ff', '#fff06a'],
+};
+
+const SPEEDS = {
+  walker: [28, 55],
+  jogger: [70, 105],
+  worker: [24, 42],
+  tourist: [20, 38],
+};
 
 // 34 locals, each standing just off a road, walking at their own pace.
+// Workers spawn near the port strip, tourists near the beach.
 export function createPedestrians(rng, world) {
   const peds = [];
   for (let i = 0; i < 34; i += 1) {
+    const roll = rng();
+    const kind = roll < 0.6 ? 'walker' : roll < 0.75 ? 'jogger' : roll < 0.88 ? 'worker' : 'tourist';
     const along = rng() < 0.5;
     const road = along ? pick(rng, world.roadsY) : pick(rng, world.roadsX);
     const side = (rng() < 0.5 ? -1 : 1) * (ROAD / 2 + 14);
+    let x = along ? range(rng, 80, 2300) : road + side;
+    let y = along ? road + side : range(rng, 80, 1700);
+    if (kind === 'worker') {
+      x = range(rng, 2100, 2360);
+      y = range(rng, 1320, 1760);
+    } else if (kind === 'tourist') {
+      x = range(rng, 2300, 2470);
+      y = range(rng, 200, 1700);
+    }
+    const [lo, hi] = SPEEDS[kind];
     peds.push({
-      x: along ? range(rng, 80, 2300) : road + side,
-      y: along ? road + side : range(rng, 80, 1700),
+      x,
+      y,
       angle: rng() * Math.PI * 2,
-      speed: range(rng, 28, 55),
-      color: pick(rng, SHIRTS),
+      speed: range(rng, lo, hi),
+      color: pick(rng, SHIRTS[kind]),
+      kind,
       state: 'walk',
       fleeX: 0,
       fleeY: 0,
@@ -45,12 +76,23 @@ export function scarePedestrians(peds, x, y, radius) {
   }
 }
 
-export function updatePedestrians(peds, dt, world) {
+// One pedestrian runs from a single scare point (a punch, a bullet).
+export function scareOne(ped, fromX, fromY) {
+  ped.state = 'flee';
+  const d = Math.hypot(ped.x - fromX, ped.y - fromY) || 1;
+  ped.fleeX = (ped.x - fromX) / d;
+  ped.fleeY = (ped.y - fromY) / d;
+  ped.pause = 2.5;
+}
+
+export function updatePedestrians(peds, dt, world, rng) {
+  const wander = rng || Math.random;
   for (const p of peds) {
     if (p.state === 'flee') {
       // Run straight away from the scare, then calm down and walk again.
-      p.x += p.fleeX * 150 * dt;
-      p.y += p.fleeY * 150 * dt;
+      const runSpeed = p.kind === 'jogger' ? 210 : 150;
+      p.x += p.fleeX * runSpeed * dt;
+      p.y += p.fleeY * runSpeed * dt;
       p.angle = Math.atan2(p.fleeY, p.fleeX);
       p.pause -= dt;
       if (p.pause <= 0) {
@@ -66,11 +108,11 @@ export function updatePedestrians(peds, dt, world) {
     p.x += Math.cos(p.angle) * p.speed * dt;
     p.y += Math.sin(p.angle) * p.speed * dt;
     // Turn around at the edge of the walked area and take a breather.
-    if (p.x < 60 || p.x > 2320 || p.y < 60 || p.y > 1840) {
+    if (p.x < 60 || p.x > 2480 || p.y < 60 || p.y > 1840) {
       p.angle += Math.PI;
       p.pause = 1;
     }
     // A small random wander so the crowd never walks in lockstep.
-    if (Math.random() < dt * 0.02) p.angle += (Math.random() - 0.5) * 1.6;
+    if (wander() < dt * 0.02) p.angle += (wander() - 0.5) * 1.6;
   }
 }

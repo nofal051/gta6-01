@@ -1,11 +1,20 @@
-// Missions and side work.
+// Missions and side work — two story arcs, ten jobs.
 //
-// The story is five jobs for Mara Voss, a fixer who runs the harbour:
-// steal a car and reach the marina, pick up a package in the park,
-// deliver it to the harbour against the clock, shake a police tail,
-// then lift the harbour ledger from the east beach and get clear.
+// Arc one is Mara Voss, a fixer who runs the harbour: steal a car and
+// reach the marina, pick up a package in the park, deliver it to the
+// harbour against the clock, shake a police tail, then lift the harbour
+// ledger from the east beach and get clear.
+//
+// Arc two is Ilsa Crane, who runs the airfield and wants the harbour
+// for herself: run a parcel to the airfield, lift a manifest from the
+// port, outrun the harbour crew's interceptors, silence the informant
+// at the beach, then take the harbour ledger's sister book from the
+// port and become the one who runs Solmar Bay.
+//
 // Between jobs there is paid side work: taxi fares for waving locals
-// and cash packages hidden around the city.
+// and cash packages hidden around the city. The bigger side systems —
+// races, courier deliveries, stunt jumps and hidden crates — live in
+// activities.js and pay through the same cash counter.
 import { MISSION_REWARDS, PACKAGE_REWARD, TAXI_FARE } from './config.js';
 import { nearestRoadPoint } from './world.js';
 
@@ -17,10 +26,16 @@ export const MISSION_DEFS = [
   { name: 'Hot Delivery', giver: 'Mara Voss', text: 'Deliver the package to the harbour before the timer runs out.', reward: 400, time: 75 },
   { name: 'Lose the Tail', giver: 'Mara Voss', text: 'The cops are onto you. Drop your wanted level to zero.', reward: 600 },
   { name: 'The Ledger', giver: 'Mara Voss', text: 'Grab the ledger at the east beach, then reach the hideout. No timer — stay alive.', reward: 1000 },
+  { name: 'Airfield Run', giver: 'Ilsa Crane', text: 'Ilsa needs a parcel at the airfield. Drive it there, fast and quiet.', reward: 350, time: 90 },
+  { name: 'Port Manifest', giver: 'Ilsa Crane', text: 'Lift the manifest from the port containers. Watch the cranes — and the cops.', reward: 500 },
+  { name: 'Interceptors', giver: 'Ilsa Crane', text: 'The harbour crew sent interceptors. Lose a 3-star tail to finish.', reward: 700 },
+  { name: 'The Informant', giver: 'Ilsa Crane', text: 'Meet the informant on the beach. He talks, then he runs — catch him.', reward: 900, time: 120 },
+  { name: 'King of the Bay', giver: 'Ilsa Crane', text: 'Take the sister ledger from the port and reach the hideout. The whole city is watching.', reward: 1500 },
 ];
 
 // One fixed destination per job, chosen from places in the city.
-function markerFor(state, index, rng) {
+// Jobs 6–10 use the new districts: the airfield and the port.
+function markerFor(state, index) {
   const w = state.world;
   const spots = [
     { x: w.roadsX[5], y: w.roadsY[3] },
@@ -28,11 +43,16 @@ function markerFor(state, index, rng) {
     { x: w.roadsX[1], y: w.roadsY[0] },
     { x: w.roadsX[3], y: w.roadsY[2] },
     { x: w.beach.x + 40, y: w.roadsY[2] },
+    { x: w.airport.x + w.airport.w / 2, y: w.airport.y + w.airport.h / 2 },
+    { x: w.port.x + 60, y: w.port.y + 120 },
+    { x: w.roadsX[2], y: w.roadsY[0] },
+    { x: w.beach.x + 40, y: w.roadsY[4] },
+    { x: w.port.x + w.port.w - 40, y: w.port.y + w.port.h - 60 },
   ];
   return spots[index % spots.length];
 }
 
-export function createMissions(rng) {
+export function createMissions() {
   return {
     index: 0,
     active: false,
@@ -53,15 +73,19 @@ export function startMission(state, rng) {
   const def = MISSION_DEFS[m.index];
   m.active = true;
   m.started = true;
-  m.target = markerFor(state, m.index, rng);
+  m.target = markerFor(state, m.index);
   m.timerMax = def.time || 0;
   m.timer = m.timerMax;
-  m.text = `${def.name}: ${def.text}`;
+  m.text = `${def.name} (${def.giver}): ${def.text}`;
   m.banner = `MISSION: ${def.name}`;
   m.bannerTimer = 3;
+  // The tail jobs start hot: two stars for job 4, three for job 8.
   if (m.index === 3) {
-    // The tail job starts hot, two stars already on the player.
     state.player.wanted = Math.max(state.player.wanted, 2);
+    state.player.wantedTimer = 0;
+  }
+  if (m.index === 7) {
+    state.player.wanted = Math.max(state.player.wanted, 3);
     state.player.wantedTimer = 0;
   }
   return true;
@@ -88,8 +112,8 @@ export function updateMissions(state, dt, rng, audio) {
   }
   if (!m.target) return;
 
-  // The tail job is finished by losing the heat, not by arriving.
-  if (m.index === 3) {
+  // The tail jobs are finished by losing the heat, not by arriving.
+  if (m.index === 3 || m.index === 7) {
     if (p.wanted === 0) completeMission(state, audio);
     return;
   }
@@ -108,9 +132,13 @@ export function completeMission(state, audio) {
   m.timer = 0;
   m.banner = `MISSION COMPLETE  +$${def.reward}`;
   m.bannerTimer = 3.5;
-  m.text = m.index >= MISSION_DEFS.length
-    ? 'Story complete! You run Solmar Bay now. Taxi fares and packages still pay.'
-    : `Job done. Press Q for the next job: ${MISSION_DEFS[m.index].name}.`;
+  if (m.index === 5) {
+    m.text = 'Arc one done — Mara is paid. Ilsa Crane is waiting at the airfield. Press Q.';
+  } else if (m.index >= MISSION_DEFS.length) {
+    m.text = 'Story complete! You run Solmar Bay now. Races, deliveries and crates still pay.';
+  } else {
+    m.text = `Job done. Press Q for the next job: ${MISSION_DEFS[m.index].name}.`;
+  }
   audio.cash();
   try {
     window.localStorage.setItem('solmarbay.missions.v1', String(m.done));

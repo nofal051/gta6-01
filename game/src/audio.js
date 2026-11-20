@@ -5,11 +5,17 @@
 // crashes and mission jingles. The audio context is only created after
 // the player first interacts, so browsers never block it, and M mutes
 // everything.
+//
+// Round two adds the hooks the new systems need: playNote for the
+// in-car radio sequencer, staticBurst for station changes, thunder
+// for storms, explosion for burning cars, rotor for the police
+// helicopter, and horn for the car horn (H).
 export function createAudio() {
   let ctx = null;
   let muted = false;
   let musicTimer = null;
   let musicStep = 0;
+  let rotorTimer = 0;
 
   // Lazily build the AudioContext on first use.
   function ensure() {
@@ -24,6 +30,7 @@ export function createAudio() {
   }
 
   // One oscillator note, optionally sliding down to another pitch.
+  // This is the shared primitive: the radio plays through it too.
   function tone(freq, dur, type, gain, slideTo) {
     if (muted) return;
     const ac = ensure();
@@ -98,6 +105,14 @@ export function createAudio() {
     get muted() {
       return muted;
     },
+    // One synth note for the radio sequencer and other callers.
+    playNote(freq, dur, type, gain) {
+      tone(freq, dur, type, gain);
+    },
+    // A crackle of radio static when the station changes.
+    staticBurst() {
+      noise(0.05, 0.05);
+    },
     shot() {
       noise(0.14, 0.2);
       tone(180, 0.1, 'square', 0.1, 60);
@@ -126,6 +141,28 @@ export function createAudio() {
     },
     engine(speed01) {
       if (!muted && ctx) tone(50 + speed01 * 90, 0.06, 'sawtooth', 0.015);
+    },
+    // Low rolling thunder after a lightning strike.
+    thunder() {
+      noise(0.9, 0.16);
+      tone(70, 0.8, 'sine', 0.1, 35);
+    },
+    // A car going up: a deep boom and a hiss of debris.
+    explosion() {
+      noise(0.5, 0.3);
+      tone(120, 0.5, 'sawtooth', 0.16, 30);
+    },
+    // The helicopter's rotor: a soft chop, throttled to once a second.
+    rotor() {
+      const now = Date.now();
+      if (now - rotorTimer < 900) return;
+      rotorTimer = now;
+      tone(90, 0.12, 'square', 0.03, 70);
+    },
+    // Two-note car horn.
+    horn() {
+      tone(370, 0.16, 'square', 0.06);
+      tone(466, 0.16, 'square', 0.05);
     },
   };
 }
