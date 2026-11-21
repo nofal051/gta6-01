@@ -8,7 +8,7 @@
 //
 // Round two stages the new systems too: the title sits at dusk, the
 // chase is a four-star night storm with the helicopter overhead, and
-// the mission shot runs Ilsa Crane's airfield job in daylight.
+// the mission shot runs Dario Salas' boardwalk job in daylight.
 import { STEP } from './config.js';
 import { nearestRoadPoint } from './world.js';
 import { SCREEN_PLAY, SCREEN_TITLE } from './render.js';
@@ -136,12 +136,13 @@ export function stageShot(name, state) {
   }
 
   if (name === 'mission') {
-    // Ilsa Crane's airfield run, job six: twelve seconds of driving
-    // toward the runway with the mission marker and timer on the HUD.
+    // Dario Salas' boardwalk run, job twelve: twelve seconds of
+    // driving toward the dealership with the mission marker and timer
+    // on the HUD — the new arc-three job, past the boardwalk stalls.
     state.clock = 10 * 60;
     setWeather(state.weather, 'clear');
-    state.missions.index = 5;
-    state.missions.done = 5;
+    state.missions.index = 11;
+    state.missions.done = 11;
     startMission(state, rng);
     const target = state.missions.target || { x: 1200, y: 800 };
     driveFor(state, 12, () => target);

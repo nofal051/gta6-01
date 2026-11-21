@@ -10,7 +10,9 @@
 // a saved run straight into play, and G during play quick-saves into
 // slot 1. The radio (R), the horn (H) and the garage digits (1–3 while
 // the garage menu is open) are all handled here, because they are
-// screen-level decisions, not simulation steps.
+// screen-level decisions, not simulation steps. Round three adds the
+// phone (T), weapon switching (V), the dealership (B) and the
+// ammunition store (N), each with its own menu and digit keys.
 import { BEST_KEY, CLOCK_START, MISSIONS_KEY, STEP } from './config.js';
 import { createRandom, deriveRandom } from './random.js';
 import { createWorld } from './world.js';
@@ -19,21 +21,37 @@ import { createCars } from './vehicles.js';
 import { createPedestrians } from './pedestrians.js';
 import { createPolice } from './police.js';
 import { createMissions, createSideWork, startMission } from './missions.js';
-import { firePistol, meleeAttack } from './combat.js';
+import { meleeAttack } from './combat.js';
 import { createAudio } from './audio.js';
+import { borrowLoan, buyDealerCar, buyDealerUpgrade, createEconomy, nearDealer, repayLoan, sellOldestCar } from './economy.js';
+import { buyWeapon, createWeapons, cycleWeapon, fireWeapon, nearWeaponShop, WEAPON_ORDER } from './weapons.js';
+import { createBikes } from './bikes.js';
+import { callSelected, createPhone, phoneTab, togglePhone } from './phone.js';
+import { castOrReel, createFishing } from './fishing.js';
 import {
+  ACTION_AMMO,
   ACTION_CONFIRM,
+  ACTION_DEALER,
   ACTION_ENTER_CAR,
+  ACTION_FISH,
   ACTION_HORN,
   ACTION_MELEE,
   ACTION_MISSION,
   ACTION_MUTE,
   ACTION_PAUSE,
+  ACTION_PHONE,
   ACTION_RADIO,
   ACTION_SAVE,
   ACTION_SLOT1,
   ACTION_SLOT2,
   ACTION_SLOT3,
+  ACTION_SLOT4,
+  ACTION_SLOT5,
+  ACTION_SLOT6,
+  ACTION_SLOT7,
+  ACTION_SLOT8,
+  ACTION_SLOT9,
+  ACTION_WEAPON,
   createInput,
 } from './input.js';
 import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
@@ -69,13 +87,17 @@ export function createGameState() {
     rng: deriveRandom(seed, 'game'),
     world,
     player: createPlayer(spawn.x, spawn.y),
-    cars: createCars(deriveRandom(seed, 'cars'), world),
+    cars: [...createCars(deriveRandom(seed, 'cars'), world), ...createBikes(deriveRandom(seed, 'bikes'), world)],
     peds: createPedestrians(deriveRandom(seed, 'peds'), world),
     police: createPolice(),
     missions: createMissions(),
     side: createSideWork(deriveRandom(seed, 'side'), world),
     activities: createActivities(deriveRandom(seed, 'acts'), world),
     garage: createGarage(world),
+    economy: createEconomy(world, deriveRandom(seed, 'econ')),
+    weapons: createWeapons(world, deriveRandom(seed, 'arms')),
+    phone: createPhone(),
+    fishing: createFishing(),
     daynight: createDayNight(),
     weather: createWeather(deriveRandom(seed, 'sky')),
     radio: createRadio(),
@@ -177,7 +199,9 @@ function runGame() {
   }
 
   // Digits mean different things by screen: on the title they load a
-  // save slot, in the open garage they buy upgrades.
+  // save slot, with the phone open they switch tabs, in the open
+  // dealership they buy cars and upgrades, in the ammunition store
+  // they buy guns and ammo, in the open garage they buy upgrades.
   function handleDigits(actions) {
     if (screen === SCREEN_TITLE) {
       const slot = actions & ACTION_SLOT1 ? 1 : actions & ACTION_SLOT2 ? 2 : actions & ACTION_SLOT3 ? 3 : 0;
@@ -188,7 +212,49 @@ function runGame() {
       }
       return;
     }
-    if (screen === SCREEN_PLAY && state.garage.menuOpen) {
+    if (screen !== SCREEN_PLAY) return;
+    if (state.phone.open) {
+      if (actions & ACTION_SLOT1) phoneTab(state.phone, 0);
+      else if (actions & ACTION_SLOT2) phoneTab(state.phone, 1);
+      else if (actions & ACTION_SLOT3) phoneTab(state.phone, 2);
+      else if (actions & ACTION_SLOT4) phoneTab(state.phone, 3);
+      return;
+    }
+    if (state.economy.dealer.menuOpen) {
+      const d = state.economy.dealer;
+      let result = null;
+      if (actions & ACTION_SLOT1) { d.selected = 0; result = buyDealerCar(state, 0, audio); }
+      else if (actions & ACTION_SLOT2) { d.selected = 1; result = buyDealerCar(state, 1, audio); }
+      else if (actions & ACTION_SLOT3) { d.selected = 2; result = buyDealerCar(state, 2, audio); }
+      else if (actions & ACTION_SLOT4) { d.selected = 3; result = buyDealerCar(state, 3, audio); }
+      else if (actions & ACTION_SLOT5) result = buyDealerUpgrade(state, 'engine', audio);
+      else if (actions & ACTION_SLOT6) result = buyDealerUpgrade(state, 'armor', audio);
+      else if (actions & ACTION_SLOT7) result = buyDealerUpgrade(state, 'paint', audio);
+      else if (actions & ACTION_SLOT8) result = sellOldestCar(state, audio);
+      else if (actions & ACTION_SLOT9) {
+        result = state.economy.debt > 0 ? repayLoan(state, audio) : borrowLoan(state, audio);
+      }
+      if (result) {
+        d.message = result.message;
+        d.messageTimer = 3;
+      }
+      return;
+    }
+    if (state.weapons.shop.menuOpen) {
+      const s = state.weapons.shop;
+      let result = null;
+      if (actions & ACTION_SLOT1) { s.shopIndex = 0; result = buyWeapon(state, 0, audio); }
+      else if (actions & ACTION_SLOT2) { s.shopIndex = 1; result = buyWeapon(state, 1, audio); }
+      else if (actions & ACTION_SLOT3) { s.shopIndex = 2; result = buyWeapon(state, 2, audio); }
+      else if (actions & ACTION_SLOT4) { s.shopIndex = 3; result = buyWeapon(state, 3, audio); }
+      else if (actions & ACTION_SLOT5) result = buyWeapon(state, WEAPON_ORDER.length, audio);
+      if (result) {
+        s.message = result.message;
+        s.messageTimer = 3;
+      }
+      return;
+    }
+    if (state.garage.menuOpen) {
       let result = null;
       if (actions & ACTION_SLOT1) result = buyUpgrade(state, 'engine', 0, audio);
       else if (actions & ACTION_SLOT2) result = buyUpgrade(state, 'armor', 0, audio);
@@ -215,7 +281,16 @@ function runGame() {
       if (actions & ACTION_CONFIRM) startGame(null);
     } else if (screen === SCREEN_PLAY) {
       if (actions & ACTION_PAUSE) {
-        if (state.garage.menuOpen) {
+        if (state.phone.open) {
+          state.phone.open = false;
+        } else if (state.economy.dealer.menuOpen) {
+          // Esc at the dealership just closes the showroom.
+          state.economy.dealer.menuOpen = false;
+          state.economy.dealer.dismissed = true;
+        } else if (state.weapons.shop.menuOpen) {
+          state.weapons.shop.menuOpen = false;
+          state.weapons.shop.dismissed = true;
+        } else if (state.garage.menuOpen) {
           // Esc in the shop just closes the shop; the city goes on.
           state.garage.menuOpen = false;
           state.garage.dismissed = true;
@@ -230,13 +305,42 @@ function runGame() {
         if (actions & ACTION_MISSION) startMission(state, state.rng);
         if (actions & ACTION_RADIO && state.player.car) cycleStation(state.radio);
         if (actions & ACTION_HORN && state.player.car) audio.horn();
+        if (actions & ACTION_PHONE) togglePhone(state.phone);
+        if (actions & ACTION_WEAPON) {
+          const gun = cycleWeapon(state);
+          if (gun) announce(`Weapon: ${gun}.`);
+        }
+        if (actions & ACTION_DEALER) {
+          if (nearDealer(state.economy, state.player)) {
+            state.economy.dealer.menuOpen = true;
+            state.economy.dealer.dismissed = false;
+          } else if (state.economy.dealer.menuOpen) {
+            state.economy.dealer.menuOpen = false;
+          }
+        }
+        if (actions & ACTION_AMMO) {
+          if (nearWeaponShop(state.weapons, state.player)) {
+            state.weapons.shop.menuOpen = true;
+            state.weapons.shop.dismissed = false;
+          } else if (state.weapons.shop.menuOpen) {
+            state.weapons.shop.menuOpen = false;
+          }
+        }
+        if (actions & ACTION_FISH) {
+          const msg = castOrReel(state, audio);
+          if (msg) announce(msg);
+        }
+        if (actions & ACTION_CONFIRM && state.phone.open) {
+          const result = callSelected(state, audio);
+          if (result) announce(result.message);
+        }
         if (actions & ACTION_SAVE) {
           const ok = writeSlot(1, state);
           state.saveNotice = ok ? 'Saved to slot 1 (G).' : 'Save failed — storage off.';
           state.saveNoticeTimer = 2.5;
         }
         handleDigits(actions);
-        if (input.mouse.down) firePistol(state, audio);
+        if (input.mouse.down && !state.phone.open && !state.economy.dealer.menuOpen && !state.weapons.shop.menuOpen) fireWeapon(state, audio);
         while (accumulator >= STEP) {
           const over = stepGame(state, input, audio, STEP);
           accumulator -= STEP;

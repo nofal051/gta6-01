@@ -11,10 +11,16 @@
 // helicopter warning and the save confirmation are drawn here too,
 // since they are all screen-space panels.
 import { WORLD_H, WORLD_W } from './config.js';
+import { districtAt } from './world.js';
 import { activitySummary } from './activities.js';
 import { garageMenuLines } from './garage.js';
 import { radioLabel } from './radio.js';
 import { weatherLabel } from './weather.js';
+import { dealerMenuLines } from './economy.js';
+import { weaponShopLines, WEAPONS } from './weapons.js';
+import { isWheelie } from './bikes.js';
+import { fishingStatus } from './fishing.js';
+import { PHONE_CONTACTS, PHONE_SERVICES, PHONE_TABS, phoneStatsLines } from './phone.js';
 
 // A five-pointed star at (x, y) with outer radius `r`.
 function drawStar(ctx, x, y, r) {
@@ -65,9 +71,14 @@ function drawMinimap(ctx, state) {
   for (const ry of state.world.roadsY) ctx.fillRect(mx, my + ry * sy, mw, 4);
   ctx.fillStyle = '#2e7fb8';
   ctx.fillRect(mx + (WORLD_W - 110) * sx, my, 110 * sx, mh);
-  // The garage and the airport get a dot of their own.
+  // The garage, the dealership, the ammunition store and the
+  // airport get a dot of their own.
   ctx.fillStyle = '#ff8c1a';
   ctx.fillRect(mx + state.garage.x * sx - 3, my + state.garage.y * sy - 3, 6, 6);
+  ctx.fillStyle = '#ffd23d';
+  ctx.fillRect(mx + state.economy.dealer.x * sx - 3, my + state.economy.dealer.y * sy - 3, 6, 6);
+  ctx.fillStyle = '#ff9ecf';
+  ctx.fillRect(mx + state.weapons.shop.x * sx - 3, my + state.weapons.shop.y * sy - 3, 6, 6);
   ctx.fillStyle = '#7ad9ff';
   ctx.fillRect(mx + state.world.airport.x * sx - 3, my + state.world.airport.y * sy - 3, 6, 6);
   if (state.missions.target) {
@@ -104,6 +115,66 @@ function drawMinimap(ctx, state) {
   ctx.stroke();
 }
 
+// The phone panel: tabs across the top, the selected tab's rows,
+// and the last message at the bottom. Stats come from phone.js.
+function drawPhone(ctx, state, best) {
+  const phone = state.phone;
+  ctx.fillStyle = 'rgba(8,12,28,0.92)';
+  ctx.fillRect(860, 210, 400, 300);
+  ctx.strokeStyle = '#2fd94f';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(860, 210, 400, 300);
+  ctx.fillStyle = '#2fd94f';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText('PHONE — T close', 880, 242);
+  ctx.font = '15px sans-serif';
+  PHONE_TABS.forEach((tab, i) => {
+    ctx.fillStyle = phone.tab === i ? '#ffd23d' : '#cfe3ff';
+    ctx.fillText(`${i + 1} ${tab}`, 880 + i * 95, 268);
+  });
+  ctx.fillStyle = '#fff';
+  ctx.font = '16px sans-serif';
+  if (phone.tab === 0) {
+    PHONE_CONTACTS.forEach((c, i) => {
+      ctx.fillStyle = phone.selected === i ? '#ffd23d' : '#fff';
+      ctx.fillText(`${phone.selected === i ? '► ' : '  '}${c.name} — ${c.role}`, 880, 300 + i * 26);
+    });
+    ctx.fillStyle = '#cfe3ff';
+    ctx.font = '14px sans-serif';
+    fitLine(ctx, PHONE_CONTACTS[phone.selected % PHONE_CONTACTS.length].line, 880, 400, 360);
+  } else if (phone.tab === 1) {
+    PHONE_SERVICES.forEach((s, i) => {
+      ctx.fillStyle = phone.selected === i ? '#ffd23d' : '#fff';
+      ctx.fillText(`${phone.selected === i ? '► ' : '  '}${s.name} — $${s.price}`, 880, 300 + i * 26);
+    });
+    ctx.fillStyle = '#cfe3ff';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('Space to call the selected service.', 880, 400);
+  } else if (phone.tab === 2) {
+    phoneStatsLines(state, best).forEach((line, i) => {
+      ctx.fillStyle = '#fff';
+      fitLine(ctx, line, 880, 300 + i * 26, 360);
+    });
+  } else {
+    // Inbox: the last few texts from the fixers, newest last.
+    const inbox = state.phone.inbox;
+    if (inbox.length === 0) {
+      ctx.fillStyle = '#cfe3ff';
+      ctx.fillText('No messages yet — finish a job.', 880, 300);
+    } else {
+      inbox.slice(-6).forEach((line, i) => {
+        ctx.fillStyle = '#fff';
+        fitLine(ctx, line, 880, 300 + i * 26, 360);
+      });
+    }
+  }
+  if (phone.message) {
+    ctx.fillStyle = '#7dff8a';
+    ctx.font = '14px sans-serif';
+    fitLine(ctx, phone.message, 880, 480, 360);
+  }
+}
+
 export function drawHUD(ctx, state, screen, best, camX, camY) {
   const p = state.player;
   if (screen === 'title') return;
@@ -116,7 +187,7 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
   ctx.fillText(`$${p.cash}`, 18, 32);
   ctx.fillStyle = '#fff';
   ctx.font = '18px sans-serif';
-  ctx.fillText(`Missions ${state.missions.done}/10`, 150, 30);
+  ctx.fillText(`Missions ${state.missions.done}/14`, 150, 30);
   for (let i = 0; i < 5; i += 1) {
     ctx.fillStyle = i < p.wanted ? '#ffd23d' : 'rgba(255,255,255,0.25)';
     drawStar(ctx, 330 + i * 30, 22, 11);
@@ -138,6 +209,8 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
   ctx.font = '14px sans-serif';
   ctx.fillText(`${weatherLabel(state.weather)} · ${state.daynight.phase}`, 220, 64);
   ctx.fillText(activitySummary(state.activities), 420, 64);
+  ctx.fillStyle = '#7dff8a';
+  ctx.fillText(`📍 ${districtAt(state.world, p.x, p.y).toUpperCase()}`, 880, 64);
 
   // Helicopter warning, flashing above the controls hint, clear of
   // the minimap and the mission banner.
@@ -162,7 +235,9 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
   ctx.fillStyle = '#fff';
   ctx.font = '16px sans-serif';
   ctx.fillText(`HEALTH ${Math.ceil(p.health)}`, 24, 700);
-  ctx.fillText(`AMMO ${p.ammo}`, 150, 700);
+  const gun = WEAPONS[state.weapons.current];
+  const held = state.weapons.owned[state.weapons.current];
+  ctx.fillText(`${gun.name.toUpperCase()} ${held ? held.ammo : 0}`, 150, 700);
 
   // Speedometer, bottom right, only while driving.
   if (!p.onFoot && p.car) {
@@ -174,6 +249,11 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
     ctx.font = '14px sans-serif';
     ctx.fillStyle = '#cfe3ff';
     ctx.fillText(`${p.car.name || 'Car'} · ${p.car.kind || ''}`, 1080, 700);
+    if (isWheelie(state)) {
+      ctx.fillStyle = '#ffd23d';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('WHEELIE! +$2', 1080, 640);
+    }
   }
 
   // Mission objective, top left under the bar, with the timer when
@@ -206,6 +286,17 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
     ctx.fillStyle = '#ff8c1a';
     ctx.font = 'bold 15px sans-serif';
     ctx.fillText(`DELIVERY: reach the orange ring — ${Math.ceil(state.activities.delivery.timer)}s`, 24, 163);
+  }
+
+  // Fishing status, under the mission box when the rod is out or a
+  // catch was just made. A bite flashes red so it is hard to miss.
+  const fishLine = fishingStatus(state);
+  if (fishLine) {
+    ctx.fillStyle = 'rgba(8,12,28,0.55)';
+    ctx.fillRect(14, 178, 430, 30);
+    ctx.fillStyle = state.fishing.state === 'bite' ? '#ff6b5e' : '#7ad9ff';
+    ctx.font = 'bold 15px sans-serif';
+    fitLine(ctx, fishLine, 24, 199, 410);
   }
 
   // A big centre banner while a mission starts, completes or fails,
@@ -244,6 +335,43 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
     }
   }
 
+  // Dealership menu, centre screen while the showroom is open.
+  if (state.economy.dealer.menuOpen) {
+    const lines = dealerMenuLines(state);
+    ctx.fillStyle = 'rgba(8,12,28,0.88)';
+    ctx.fillRect(340, 200, 600, 240);
+    ctx.strokeStyle = '#ffd23d';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(340, 200, 600, 240);
+    ctx.fillStyle = '#ffd23d';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(lines[0], 360, 232);
+    ctx.fillStyle = '#fff';
+    ctx.font = '17px sans-serif';
+    lines.slice(1).forEach((line, i) => ctx.fillText(line, 360, 262 + i * 28));
+  }
+
+  // Ammunition store menu, centre screen while the shop is open.
+  if (state.weapons.shop.menuOpen) {
+    const lines = weaponShopLines(state);
+    ctx.fillStyle = 'rgba(8,12,28,0.88)';
+    ctx.fillRect(340, 200, 600, 250);
+    ctx.strokeStyle = '#ff9ecf';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(340, 200, 600, 250);
+    ctx.fillStyle = '#ff9ecf';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(lines[0], 360, 232);
+    ctx.fillStyle = '#fff';
+    ctx.font = '17px sans-serif';
+    lines.slice(1).forEach((line, i) => ctx.fillText(line, 360, 262 + i * 28));
+  }
+
+  // The phone, right side of the screen while it is open.
+  if (state.phone.open) {
+    drawPhone(ctx, state, best);
+  }
+
   // Save confirmation, fading under the top bar.
   if (state.saveNoticeTimer > 0) {
     ctx.globalAlpha = Math.min(1, state.saveNoticeTimer);
@@ -257,7 +385,7 @@ export function drawHUD(ctx, state, screen, best, camX, camY) {
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = '14px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('WASD move/drive • E car • Click shoot • F punch • Q mission • R radio • G save • H horn • P pause', 640, 712);
+  ctx.fillText('WASD move/drive • E car/bike • Click shoot • F punch • V gun • Q mission • T phone • B dealer • N ammo • R radio • G save • H horn • P pause', 640, 712);
   ctx.textAlign = 'left';
 
   drawMinimap(ctx, state);

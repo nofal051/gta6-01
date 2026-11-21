@@ -59,6 +59,19 @@ export function snapshotFrom(state) {
     racesWon: state.activities.racesWon,
     deliveriesDone: state.activities.deliveriesDone,
     jumpsDone: state.activities.jumpsDone,
+    // Round three: the economy and the armoury. Old saves (without
+    // these fields) load with an empty garage and a pistol, so a
+    // saved run never loses its progress to a new field.
+    ownedCars: state.economy.owned,
+    earned: state.economy.earned,
+    spent: state.economy.spent,
+    debt: state.economy.debt,
+    fishingCaught: state.fishing.caught,
+    fishingEarned: state.fishing.earned,
+    dropsTaken: state.economy.drops.map((d) => d.taken),
+    weaponsOwned: state.weapons.owned,
+    weaponCurrent: state.weapons.current,
+    weaponPickupsTaken: state.weapons.pickups.map((pk) => pk.taken),
   };
 }
 
@@ -141,6 +154,56 @@ export function applySnapshot(state, snap) {
   state.activities.racesWon = snap.racesWon || 0;
   state.activities.deliveriesDone = snap.deliveriesDone || 0;
   state.activities.jumpsDone = snap.jumpsDone || 0;
+  // Round three fields, all optional for old saves.
+  state.economy.owned = snap.ownedCars || [];
+  state.economy.earned = snap.earned || 0;
+  state.economy.spent = snap.spent || 0;
+  state.economy.debt = snap.debt || 0;
+  state.fishing.caught = snap.fishingCaught || 0;
+  state.fishing.earned = snap.fishingEarned || 0;
+  if (snap.dropsTaken) {
+    snap.dropsTaken.forEach((taken, i) => {
+      if (state.economy.drops[i]) state.economy.drops[i].taken = !!taken;
+    });
+  }
+  if (snap.weaponsOwned) {
+    state.weapons.owned = snap.weaponsOwned;
+    state.weapons.current = snap.weaponCurrent || 'pistol';
+    p.ammo = (state.weapons.owned[state.weapons.current] || { ammo: 24 }).ammo;
+  }
+  if (snap.weaponPickupsTaken) {
+    snap.weaponPickupsTaken.forEach((taken, i) => {
+      if (state.weapons.pickups[i]) state.weapons.pickups[i].taken = !!taken;
+    });
+  }
+  // Bought cars come back: park each owned car on the dealership
+  // forecourt so the player can drive it away after loading.
+  const d = state.economy.dealer;
+  state.economy.owned.forEach((owned, i) => {
+    const car = state.cars.find((c) => c.id === owned.id);
+    if (car) return;
+    const restored = {
+      id: owned.id,
+      x: d.x + 30 + (i % 3) * 60,
+      y: d.y + d.h + 34,
+      angle: 0,
+      speed: 0,
+      color: owned.color,
+      name: owned.name,
+      kind: owned.kind,
+      hp: 100,
+      wrecked: false,
+      traffic: false,
+      parked: true,
+      police: false,
+      axis: 'x',
+      dir: 1,
+      lane: 0,
+      driver: 'none',
+      skidTrail: [],
+    };
+    state.cars.push(restored);
+  });
   state.overReason = null;
   return true;
 }

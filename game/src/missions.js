@@ -1,4 +1,4 @@
-// Missions and side work — two story arcs, ten jobs.
+// Missions and side work — three story arcs, fourteen jobs.
 //
 // Arc one is Mara Voss, a fixer who runs the harbour: steal a car and
 // reach the marina, pick up a package in the park, deliver it to the
@@ -11,12 +11,39 @@
 // at the beach, then take the harbour ledger's sister book from the
 // port and become the one who runs Solmar Bay.
 //
+// Arc three is Dario Salas, the boardwalk bookie: collect his cut on
+// the boards in two stages, run a package from the pier to the
+// dealership, steal a bike for a getaway ride to the pier, then take
+// his ledger from the port and finish as king of the boardwalk.
+//
 // Between jobs there is paid side work: taxi fares for waving locals
 // and cash packages hidden around the city. The bigger side systems —
 // races, courier deliveries, stunt jumps and hidden crates — live in
 // activities.js and pay through the same cash counter.
 import { MISSION_REWARDS, PACKAGE_REWARD, TAXI_FARE } from './config.js';
 import { nearestRoadPoint } from './world.js';
+import { ensureBikeNearby } from './bikes.js';
+import { earnCash } from './economy.js';
+import { pushPhoneMessage } from './phone.js';
+
+// What the giver texts you after each job lands. The phone's inbox
+// tab keeps them, so the story has a paper trail.
+const MISSION_TEXTS = [
+  'Nice wheels. You drive like you mean it.',
+  'Package safe. You are quicker than you look.',
+  'Delivered hot. The harbour notices that.',
+  'Clean. The cops are still looking for a ghost.',
+  'The ledger is mine now. One more thing — Ilsa is watching you.',
+  'Parcel in. The airfield runs on time because of you.',
+  'Manifest read. The port has no secrets from me now.',
+  'They never even saw you. Beautiful.',
+  'The informant sang, then he ran. You caught him anyway.',
+  'The harbour is mine. You did that. Remember who paid you.',
+  'Debt collected. The boardwalk pays its bookie.',
+  'Package delivered. The boards are yours tonight.',
+  'That bike ride? The whole pier saw it. Superb.',
+  'The boardwalk is ours. You run Solmar Bay now — all of it.',
+];
 
 // The story chain. `time` is a countdown in seconds, only where the job
 // has one. The payout lives here; config's MISSION_REWARDS mirrors it.
@@ -31,6 +58,13 @@ export const MISSION_DEFS = [
   { name: 'Interceptors', giver: 'Ilsa Crane', text: 'The harbour crew sent interceptors. Lose a 3-star tail to finish.', reward: 700 },
   { name: 'The Informant', giver: 'Ilsa Crane', text: 'Meet the informant on the beach. He talks, then he runs — catch him.', reward: 900, time: 120 },
   { name: 'King of the Bay', giver: 'Ilsa Crane', text: 'Take the sister ledger from the port and reach the hideout. The whole city is watching.', reward: 1500 },
+  // Arc three is Dario Salas, the boardwalk bookie. He bankrolled
+  // half the city and now he wants it back — in cash, in muscle, and
+  // in one very fast bike ride down the boards.
+  { name: 'Beachfront Debt', giver: 'Dario Salas', text: 'Dario needs his cut. Collect the cash drop on the boardwalk, then bring it to his stall.', reward: 800, time: 100 },
+  { name: 'Boardwalk Run', giver: 'Dario Salas', text: 'Run a package from the pier to the dealership — the cops watch the boards, so stay quick.', reward: 1100, time: 90 },
+  { name: 'The Getaway Bike', giver: 'Dario Salas', text: 'Dario\'s rider is down. Steal a bike, ride it to the pier, and lose the heat on the way.', reward: 1300 },
+  { name: 'King of the Boardwalk', giver: 'Dario Salas', text: 'Take Dario\'s ledger from the port, then reach the boardwalk. Three stars will be on you.', reward: 2000 },
 ];
 
 // One fixed destination per job, chosen from places in the city.
@@ -48,6 +82,11 @@ function markerFor(state, index) {
     { x: w.roadsX[2], y: w.roadsY[0] },
     { x: w.beach.x + 40, y: w.roadsY[4] },
     { x: w.port.x + w.port.w - 40, y: w.port.y + w.port.h - 60 },
+    // Jobs 11–14 use the new boardwalk district and the dealership.
+    { x: w.boardwalk.x + w.boardwalk.w / 2, y: w.boardwalk.y + 300 },
+    { x: state.economy.dealer.x + state.economy.dealer.w / 2, y: state.economy.dealer.y + state.economy.dealer.h / 2 },
+    { x: w.boardwalk.pier.x + 40, y: w.boardwalk.pier.y },
+    { x: w.boardwalk.x + w.boardwalk.w / 2, y: w.boardwalk.y + 1200 },
   ];
   return spots[index % spots.length];
 }
@@ -61,6 +100,9 @@ export function createMissions() {
     target: null,
     timer: 0,
     timerMax: 0,
+    // Two-stage jobs (arc three's first) use this: stage 0 is the
+    // pickup, stage 1 is the delivery. Single-stage jobs stay at 0.
+    stage: 0,
     text: 'Press Q to start the next job for Mara Voss.',
     banner: '',
     bannerTimer: 0,
@@ -73,6 +115,7 @@ export function startMission(state, rng) {
   const def = MISSION_DEFS[m.index];
   m.active = true;
   m.started = true;
+  m.stage = 0;
   m.target = markerFor(state, m.index);
   m.timerMax = def.time || 0;
   m.timer = m.timerMax;
@@ -85,6 +128,16 @@ export function startMission(state, rng) {
     state.player.wantedTimer = 0;
   }
   if (m.index === 7) {
+    state.player.wanted = Math.max(state.player.wanted, 3);
+    state.player.wantedTimer = 0;
+  }
+  // Arc three: the getaway job parks a bike in reach, and the final
+  // job starts with the whole city watching — three stars.
+  if (m.index === 12) {
+    ensureBikeNearby(state);
+    m.text = `${def.name} (${def.giver}): ${def.text} (You need to be ON A BIKE.)`;
+  }
+  if (m.index === 13) {
     state.player.wanted = Math.max(state.player.wanted, 3);
     state.player.wantedTimer = 0;
   }
@@ -118,22 +171,42 @@ export function updateMissions(state, dt, rng, audio) {
     return;
   }
   const dist = Math.hypot(p.x - m.target.x, p.y - m.target.y);
+  // The getaway job only counts when the player arrives on a bike.
+  if (m.index === 12 && (!p.car || !p.car.isBike)) return;
+  // Beachfront Debt is two stages: collect the cash on the
+  // boardwalk, then carry it to Dario's stall at the far end.
+  if (m.index === 10 && m.stage === 0) {
+    if (dist < 46) {
+      m.stage = 1;
+      const stall = state.world.boardwalk.stalls[4];
+      m.target = { x: stall.x + stall.w / 2, y: stall.y + stall.h / 2 };
+      m.text = 'Beachfront Debt (Dario Salas): Cash collected — take it to Dario\'s bait stall at the far end of the boardwalk.';
+      m.banner = 'CASH COLLECTED — DELIVER IT';
+      m.bannerTimer = 3;
+      audio.cash();
+    }
+    return;
+  }
   if (dist < 46) completeMission(state, audio);
 }
 
 export function completeMission(state, audio) {
   const m = state.missions;
   const def = MISSION_DEFS[m.index];
-  state.player.cash += def.reward;
+  earnCash(state, def.reward);
   m.done += 1;
   m.index += 1;
   m.active = false;
+  m.stage = 0;
   m.target = null;
   m.timer = 0;
   m.banner = `MISSION COMPLETE  +$${def.reward}`;
   m.bannerTimer = 3.5;
+  pushPhoneMessage(state, def.giver, MISSION_TEXTS[m.index] || 'Job done. Well driven.');
   if (m.index === 5) {
     m.text = 'Arc one done — Mara is paid. Ilsa Crane is waiting at the airfield. Press Q.';
+  } else if (m.index === 10) {
+    m.text = 'Arc two done — Ilsa runs the harbour. Dario Salas is waiting on the boardwalk. Press Q.';
   } else if (m.index >= MISSION_DEFS.length) {
     m.text = 'Story complete! You run Solmar Bay now. Races, deliveries and crates still pay.';
   } else {
@@ -171,7 +244,7 @@ export function updateSideWork(state, dt, rng, audio) {
     if (pkg.taken) continue;
     if (Math.hypot(p.x - pkg.x, p.y - pkg.y) < 34) {
       pkg.taken = true;
-      p.cash += PACKAGE_REWARD;
+      earnCash(state, PACKAGE_REWARD);
       state.events.push({ type: 'cash', amount: PACKAGE_REWARD });
       audio.pickup();
     }
@@ -206,7 +279,7 @@ export function updateSideWork(state, dt, rng, audio) {
     }
   } else if (taxi.dest && p.car && Math.hypot(p.x - taxi.dest.x, p.y - taxi.dest.y) < 60) {
     // Drop them at the marker and get paid.
-    p.cash += TAXI_FARE;
+    earnCash(state, TAXI_FARE);
     state.events.push({ type: 'cash', amount: TAXI_FARE });
     audio.cash();
     side.taxi = null;

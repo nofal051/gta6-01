@@ -23,6 +23,19 @@ export const ACTION_HORN = 256;
 export const ACTION_SLOT1 = 512;
 export const ACTION_SLOT2 = 1024;
 export const ACTION_SLOT3 = 2048;
+// Round three: the phone (T), weapon switch (V), the dealership (B),
+// the ammunition store (N), and digits 4–7 for the new shop menus.
+export const ACTION_PHONE = 4096;
+export const ACTION_WEAPON = 8192;
+export const ACTION_DEALER = 16384;
+export const ACTION_AMMO = 32768;
+export const ACTION_SLOT4 = 65536;
+export const ACTION_SLOT5 = 131072;
+export const ACTION_SLOT6 = 262144;
+export const ACTION_SLOT7 = 524288;
+export const ACTION_SLOT8 = 1048576;
+export const ACTION_FISH = 2097152;
+export const ACTION_SLOT9 = 4194304;
 
 // Which key codes raise which action, on a fresh (non-repeat) press.
 const KEY_ACTIONS = {
@@ -37,12 +50,29 @@ const KEY_ACTIONS = {
   KeyR: ACTION_RADIO,
   KeyG: ACTION_SAVE,
   KeyH: ACTION_HORN,
+  KeyT: ACTION_PHONE,
+  KeyV: ACTION_WEAPON,
+  KeyB: ACTION_DEALER,
+  KeyN: ACTION_AMMO,
+  KeyJ: ACTION_FISH,
   Digit1: ACTION_SLOT1,
   Digit2: ACTION_SLOT2,
   Digit3: ACTION_SLOT3,
+  Digit4: ACTION_SLOT4,
+  Digit5: ACTION_SLOT5,
+  Digit6: ACTION_SLOT6,
+  Digit7: ACTION_SLOT7,
+  Digit8: ACTION_SLOT8,
+  Digit9: ACTION_SLOT9,
   Numpad1: ACTION_SLOT1,
   Numpad2: ACTION_SLOT2,
   Numpad3: ACTION_SLOT3,
+  Numpad4: ACTION_SLOT4,
+  Numpad5: ACTION_SLOT5,
+  Numpad6: ACTION_SLOT6,
+  Numpad7: ACTION_SLOT7,
+  Numpad8: ACTION_SLOT8,
+  Numpad9: ACTION_SLOT9,
 };
 
 // Keys whose default browser behaviour would fight the game.

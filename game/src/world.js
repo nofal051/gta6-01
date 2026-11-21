@@ -1,12 +1,16 @@
-// The city of Solmar Bay, rebuilt for round two.
+// The city of Solmar Bay, rebuilt for round two and extended in
+// round three.
 //
 // One seeded build of the whole map: a grid of roads, blocks filled
 // with buildings, a park, a beach running into the sea along the east
-// edge — and two new districts. The south-west block is now the
+// edge — and three new districts. The south-west block is now the
 // airfield: a runway, a terminal and parked planes. The strip between
 // the last road and the beach is the harbour port: docks, stacked
-// shipping containers and cranes. The garage forecourt is reserved
-// here too, so no building ever spawns on top of the workshop.
+// shipping containers and cranes. The beach itself grew a boardwalk
+// in round three: wooden planks, a pier out over the water, five shop
+// stalls, benches and umbrellas, with strollers ambling the boards.
+// The garage forecourt is reserved here too, so no building ever
+// spawns on top of the workshop.
 //
 // The layout is fixed for the run once it is built — nothing here
 // moves. The helpers at the bottom answer the questions the other
@@ -107,6 +111,42 @@ export function createWorld(rng) {
     });
   }
 
+  // The boardwalk: a wooden strip along the west edge of the beach,
+  // running most of the map's height, with a pier reaching into the
+  // sea, five shop stalls, benches, and umbrellas on the sand. The
+  // stalls are solid; the benches and umbrellas are scenery.
+  const boardwalk = {
+    x: WORLD_W - 268,
+    y: 90,
+    w: 48,
+    h: 1560,
+    pier: { x: WORLD_W - 110, y: 820, w: 96, h: 26 },
+    stalls: [],
+    benches: [],
+    umbrellas: [],
+  };
+  const STALL_NAMES = ['Tacos', 'Surf', 'Ice', 'Arcade', 'Bait'];
+  for (let i = 0; i < 5; i += 1) {
+    boardwalk.stalls.push({
+      x: boardwalk.x - 52,
+      y: 180 + i * 300,
+      w: 46,
+      h: 54,
+      name: STALL_NAMES[i],
+      color: pick(rng, ['#c94a4a', '#4a7fc9', '#c9a44a', '#4ac9a8', '#7a5ac9']),
+    });
+  }
+  for (let i = 0; i < 10; i += 1) {
+    boardwalk.benches.push({ x: boardwalk.x + 8, y: 150 + i * 150 });
+  }
+  for (let i = 0; i < 8; i += 1) {
+    boardwalk.umbrellas.push({
+      x: WORLD_W - 200 + (i % 2) * 60,
+      y: 200 + Math.floor(i / 2) * 380,
+      color: pick(rng, ['#ff5a4d', '#ffd23d', '#2fd9c9', '#ff9ecf']),
+    });
+  }
+
   // Walk the blocks between neighbouring roads. The park block gets
   // trees only, the airfield block gets nothing (its own props live
   // above), and every other block gets a few buildings and a few trees
@@ -154,7 +194,7 @@ export function createWorld(rng) {
   const beach = { x: WORLD_W - 220, y: 0, w: 110, h: WORLD_H };
   const water = { x: WORLD_W - 110, y: 0, w: 110, h: WORLD_H };
 
-  return { roadsX, roadsY, buildings, trees, lamps, park, beach, water, airport, port, garage };
+  return { roadsX, roadsY, buildings, trees, lamps, park, beach, water, airport, port, garage, boardwalk };
 }
 
 // Is (x, y) on a road — on any vertical centreline or any horizontal one?
@@ -173,7 +213,7 @@ export function isOnRoad(world, x, y) {
 // it touched anything solid.
 export function collideBuildings(world, body, radius) {
   let hit = false;
-  const solids = [...world.buildings, world.airport.terminal, world.airport.hangar, ...world.port.containers];
+  const solids = [...world.buildings, world.airport.terminal, world.airport.hangar, ...world.port.containers, ...world.boardwalk.stalls];
   for (const b of solids) {
     const closestX = Math.max(b.x, Math.min(body.x, b.x + b.w));
     const closestY = Math.max(b.y, Math.min(body.y, b.y + b.h));
@@ -222,6 +262,7 @@ export function districtAt(world, x, y) {
   if (pointInRect(x, y, world.airport)) return 'airport';
   if (pointInRect(x, y, world.port)) return 'port';
   if (pointInRect(x, y, world.park)) return 'park';
+  if (pointInRect(x, y, world.boardwalk)) return 'boardwalk';
   if (pointInRect(x, y, world.beach)) return 'beach';
   if (pointInRect(x, y, world.water)) return 'sea';
   return 'city';

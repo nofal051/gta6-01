@@ -17,6 +17,8 @@ const SHIRTS = {
   jogger: ['#ff5a4d', '#2fd9c9', '#f2f2f2'],
   worker: ['#ff8c1a', '#ffd23d'],
   tourist: ['#ff9ecf', '#7ad9ff', '#fff06a'],
+  // Boardwalk strollers: slow, bright, and always near the sea.
+  stroller: ['#ff6b9d', '#4dd0e1', '#ffd54f', '#aed581', '#f8bbd0'],
 };
 
 const SPEEDS = {
@@ -24,6 +26,7 @@ const SPEEDS = {
   jogger: [70, 105],
   worker: [24, 42],
   tourist: [20, 38],
+  stroller: [16, 30],
 };
 
 // 34 locals, each standing just off a road, walking at their own pace.
@@ -57,6 +60,24 @@ export function createPedestrians(rng, world) {
       fleeX: 0,
       fleeY: 0,
       pause: range(rng, 0, 3),
+      hitCooldown: 0,
+    });
+  }
+  // Eight boardwalk strollers, ambling up and down the boards by the
+  // sea. They walk the boardwalk's length, not the roads.
+  const bw = world.boardwalk;
+  for (let i = 0; i < 8; i += 1) {
+    peds.push({
+      x: bw.x + bw.w / 2 + range(rng, -6, 6),
+      y: range(rng, bw.y + 20, bw.y + bw.h - 20),
+      angle: rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2,
+      speed: range(rng, 16, 30),
+      color: pick(rng, SHIRTS.stroller),
+      kind: 'stroller',
+      state: 'walk',
+      fleeX: 0,
+      fleeY: 0,
+      pause: range(rng, 0, 2),
       hitCooldown: 0,
     });
   }
@@ -107,6 +128,16 @@ export function updatePedestrians(peds, dt, world, rng) {
     }
     p.x += Math.cos(p.angle) * p.speed * dt;
     p.y += Math.sin(p.angle) * p.speed * dt;
+    // Boardwalk strollers stay on the boards: keep their x pinned
+    // to the strip and turn them at its ends.
+    if (p.kind === 'stroller' && world.boardwalk) {
+      const bw = world.boardwalk;
+      p.x = Math.max(bw.x + 6, Math.min(bw.x + bw.w - 6, p.x));
+      if (p.y < bw.y + 10 || p.y > bw.y + bw.h - 10) {
+        p.angle += Math.PI;
+        p.pause = 1;
+      }
+    }
     // Turn around at the edge of the walked area and take a breather.
     if (p.x < 60 || p.x > 2480 || p.y < 60 || p.y > 1840) {
       p.angle += Math.PI;

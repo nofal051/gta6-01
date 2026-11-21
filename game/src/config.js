@@ -55,9 +55,10 @@ export const PISTOL_AMMO_START = 24;
 export const PUNCH_DAMAGE = 34;
 export const BULLET_DAMAGE = 34;
 
-// Money: one payout per story mission — ten jobs now, two arcs of five.
-// The taxi fare and the cash found in a street package stay as before.
-export const MISSION_REWARDS = [150, 250, 400, 600, 1000, 350, 500, 700, 900, 1500];
+// Money: one payout per story mission — fourteen jobs now, three
+// arcs. The taxi fare and the cash found in a street package stay as
+// before.
+export const MISSION_REWARDS = [150, 250, 400, 600, 1000, 350, 500, 700, 900, 1500, 800, 1100, 1300, 2000];
 export const TAXI_FARE = 60;
 export const PACKAGE_REWARD = 40;
 // Side activities: race wins, courier drops, hidden crates, stunt jumps.
@@ -69,6 +70,27 @@ export const JUMP_BASE_REWARD = 50;
 // Garage: engine and armor prices per level, paint prices live in garage.js.
 export const ENGINE_PRICES = [200, 450, 800];
 export const ARMOR_PRICES = [300, 600];
+
+// Dealership: four cars for sale, from a cheap runabout to a
+// boardwalk showpiece. Buying one parks it on the forecourt, ready
+// to drive away.
+export const DEALER_CARS = [
+  { kind: 'hatch', name: 'Pip', price: 400 },
+  { kind: 'sedan', name: 'Marlin', price: 900 },
+  { kind: 'sports', name: 'Comet GT', price: 2200 },
+  { kind: 'van', name: 'Atlas XL', price: 1400 },
+];
+
+// Weapon shop: a weapon's price buys the gun with a starter box of
+// ammo; AMMO_PRICE buys one refill box for the current weapon.
+export const WEAPON_PRICES = { pistol: 0, smg: 350, shotgun: 600, rifle: 1200 };
+export const AMMO_PRICE = 60;
+export const AMMO_BOX = 30;
+
+// The phone: calling a cab costs a flat fee, the mechanic repairs
+// the car you are sitting in for a flat fee too.
+export const TAXI_CALL_FEE = 20;
+export const REPAIR_FEE = 50;
 
 // The clock: the run opens at 08:15 and advances two minutes a second.
 export const CLOCK_START = 8 * 60 + 15;

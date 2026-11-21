@@ -27,9 +27,13 @@ export const HANDLING = {
   van: { accelMul: 0.7, topMul: 0.78, cruise: 120, w: 52, h: 24 },
   truck: { accelMul: 0.6, topMul: 0.7, cruise: 105, w: 58, h: 26 },
   taxi: { accelMul: 1, topMul: 1, cruise: 155, w: 44, h: 22 },
+  // Bikes (see bikes.js): quicker off the line than a sedan, a higher
+  // top speed, a narrower body. They are built by bikes.js, never by
+  // the random car picker, so KINDS below leaves them out.
+  bike: { accelMul: 1.35, topMul: 1.18, cruise: 175, w: 30, h: 12 },
 };
 
-export const KINDS = Object.keys(HANDLING);
+export const KINDS = Object.keys(HANDLING).filter((k) => k !== 'bike');
 
 // One car. `opts` says whether it is traffic, parked or police, which
 // axis it drives along, which way, which lane offset it holds, and

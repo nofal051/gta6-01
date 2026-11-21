@@ -22,6 +22,7 @@
 // grid, so they land on real streets in every seeded city.
 
 import { nearestRoadPoint } from './world.js';
+import { earnCash } from './economy.js';
 
 const RACE_DEFS = [
   { name: 'Bay Loop', reward: 300, time: 70 },
@@ -116,7 +117,7 @@ export function updateActivities(state, dt, rng, audio) {
     if (Math.hypot(p.x - crate.x, p.y - crate.y) < 32) {
       crate.taken = true;
       act.cratesFound += 1;
-      p.cash += 25;
+      earnCash(state, 25);
       state.events.push({ type: 'cash', amount: 25 });
       audio.pickup();
     }
@@ -144,7 +145,7 @@ export function updateActivities(state, dt, rng, audio) {
         race.at += 1;
         audio.pickup();
         if (race.at >= race.checkpoints.length) {
-          p.cash += race.reward;
+          earnCash(state, race.reward);
           act.racesWon += 1;
           race.best = race.time - race.timer;
           race.active = false;
@@ -178,13 +179,17 @@ export function updateActivities(state, dt, rng, audio) {
       act.bannerTimer = 3;
       audio.fail();
     } else if (p.car && Math.hypot(p.x - del.x, p.y - del.y) < 56) {
-      p.cash += del.reward;
+      // Bike courier bonus: a delivery finished on a bike pays
+      // double — the depot loves a rider who threads traffic.
+      const onBike = !!p.car.isBike;
+      const payout = onBike ? del.reward * 2 : del.reward;
+      earnCash(state, payout);
       act.deliveriesDone += 1;
       act.delivery = null;
       act.deliveryCooldown = 6;
-      act.banner = `DELIVERED  +$${del.reward}`;
+      act.banner = onBike ? `BIKE DELIVERY  +$${payout}` : `DELIVERED  +$${payout}`;
       act.bannerTimer = 3;
-      state.events.push({ type: 'cash', amount: del.reward });
+      state.events.push({ type: 'cash', amount: payout });
       audio.cash();
     }
   }
@@ -205,7 +210,7 @@ export function updateActivities(state, dt, rng, audio) {
     act.airTime += dt;
     if (!p.car || Math.abs(p.car.speed) < 120 || act.airTime > 2.5) {
       const bonus = 50 + Math.floor(act.airTime * 10);
-      p.cash += bonus;
+      earnCash(state, bonus);
       act.jumpsDone += 1;
       act.banner = `STUNT JUMP  +$${bonus}`;
       act.bannerTimer = 3;

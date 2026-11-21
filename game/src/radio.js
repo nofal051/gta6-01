@@ -1,4 +1,4 @@
-// The in-car radio — three synthesized stations, no audio files.
+// The in-car radio — four synthesized stations, no audio files.
 //
 // The radio only plays while the player is driving, and only once the
 // player switches it on (R). Each station is a step sequencer over a
@@ -8,16 +8,19 @@
 //   SOLMAR FM — bright major-key pop arpeggios, the daytime station.
 //   NIGHT DRIVE — low synthwave pulse for driving after dark.
 //   HARBOUR JAZZ — lazy swing chords for cruising the waterfront.
-//
-// Switching station plays a short burst of static first, the way a
-// car radio does. The module owns the schedule; audio.js owns the
-// actual oscillators, through the playNote hook it exposes.
+//   BOARDWALK FM — breezy surf-rock shuffle for the beach, added in
+//     round three with the boardwalk district.
 
 export const STATIONS = [
   { name: 'SOLMAR FM', tag: 'POP', stepMs: 170, wave: 'square', gain: 0.035 },
   { name: 'NIGHT DRIVE', tag: 'SYNTH', stepMs: 240, wave: 'sawtooth', gain: 0.03 },
   { name: 'HARBOUR JAZZ', tag: 'JAZZ', stepMs: 300, wave: 'triangle', gain: 0.04 },
+  { name: 'BOARDWALK FM', tag: 'SURF', stepMs: 200, wave: 'square', gain: 0.032 },
 ];
+//
+// Switching station plays a short burst of static first, the way a
+// car radio does. The module owns the schedule; audio.js owns the
+// actual oscillators, through the playNote hook it exposes.
 
 // Note patterns as semitone offsets from a root; 0 means rest.
 // A2 = 110 Hz is the root for the first two stations, C3 for jazz.
@@ -28,9 +31,11 @@ const PATTERNS = [
   [0, 0, 3, 0, 0, 5, 0, 3, 0, 0, -2, 0, 0, 7, 5, 3],
   // HARBOUR JAZZ: wandering sevenths.
   [0, 7, 10, 7, 4, 0, 10, 7, 5, 7, 10, 12, 10, 7, 4, 0],
+  // BOARDWALK FM: a surf shuffle, quick up-down runs off the root.
+  [0, 12, 7, 12, 0, 7, 10, 7, 12, 7, 4, 7, 5, 7, 12, 0],
 ];
 
-const ROOTS = [220, 110, 130.81];
+const ROOTS = [220, 110, 130.81, 196];
 
 export function createRadio() {
   return {

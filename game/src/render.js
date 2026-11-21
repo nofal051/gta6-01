@@ -33,8 +33,13 @@ export function createRenderer(canvas) {
 
   // One car, drawn pointing along its angle: body sized by kind, cabin,
   // windshield, police lights, a taxi sign, and a gold outline when the
-  // player is driving it. A wreck is dark, tilted and smoking.
+  // player is driving it. A wreck is dark, tilted and smoking. A bike
+  // is drawn instead as two wheels and a leaning rider.
   function drawCar(c, isPlayer) {
+    if (c.isBike) {
+      drawBike(c, isPlayer);
+      return;
+    }
     const size = HANDLING[c.kind || 'sedan'];
     const w = size.w;
     const h = size.h;
@@ -73,6 +78,41 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
+  // A bike: two wheels, a frame, and a rider leaning forward. A
+  // wrecked bike lies on its side, dark and smoking like a car wreck.
+  function drawBike(c, isPlayer) {
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.angle + (c.wrecked ? 0.5 : 0));
+    ctx.strokeStyle = c.wrecked ? '#3a3a3a' : '#222';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(-11, 0, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(11, 0, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = c.wrecked ? '#3a3a3a' : c.color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-11, 0);
+    ctx.lineTo(2, -4);
+    ctx.lineTo(11, 0);
+    ctx.moveTo(2, -4);
+    ctx.lineTo(6, -9);
+    ctx.stroke();
+    ctx.fillStyle = '#f2c89b';
+    ctx.beginPath();
+    ctx.arc(6, -11, 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (isPlayer) {
+      ctx.strokeStyle = '#ffd23d';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-18, -16, 36, 32);
+    }
+    ctx.restore();
+  }
+
   // A person: a coloured body circle with a head, plus a facing line
   // for the player on foot. Joggers lean forward; workers wear a vest.
   function drawPerson(x, y, color, angle, kind) {
@@ -103,8 +143,14 @@ export function createRenderer(canvas) {
     ctx.fillRect(0, 0, WORLD_W, WORLD_H);
     ctx.fillStyle = COLORS.park;
     ctx.fillRect(w.park.x, w.park.y, w.park.w, w.park.h);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('GREEN PARK', w.park.x + 16, w.park.y + 30);
     ctx.fillStyle = COLORS.sand;
     ctx.fillRect(w.beach.x, w.beach.y, w.beach.w, w.beach.h);
+    ctx.fillStyle = 'rgba(90,60,20,0.7)';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('BEACH', w.beach.x + 22, 60);
     ctx.fillStyle = COLORS.water;
     ctx.fillRect(w.water.x, w.water.y, w.water.w, w.water.h);
     ctx.strokeStyle = 'rgba(255,255,255,0.5)';
@@ -177,6 +223,53 @@ export function createRenderer(canvas) {
     ctx.fillStyle = '#cfe3ff';
     ctx.font = 'bold 15px sans-serif';
     ctx.fillText('HARBOUR PORT', port.x + 12, port.y + port.h - 12);
+    // The boardwalk: wooden planks along the beach, a pier out over
+    // the water, five shop stalls, benches and beach umbrellas.
+    const bw = w.boardwalk;
+    ctx.fillStyle = '#a9805a';
+    ctx.fillRect(bw.x, bw.y, bw.w, bw.h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    for (let y = bw.y; y < bw.y + bw.h; y += 24) {
+      ctx.beginPath();
+      ctx.moveTo(bw.x, y);
+      ctx.lineTo(bw.x + bw.w, y);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#a9805a';
+    ctx.fillRect(bw.pier.x, bw.pier.y, bw.pier.w, bw.pier.h);
+    ctx.strokeStyle = '#8a6a44';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(bw.pier.x, bw.pier.y, bw.pier.w, bw.pier.h);
+    for (const stall of bw.stalls) {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(stall.x + 4, stall.y + 5, stall.w, stall.h);
+      ctx.fillStyle = stall.color;
+      ctx.fillRect(stall.x, stall.y, stall.w, stall.h);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(stall.x, stall.y, stall.w, 12);
+      ctx.fillStyle = '#111';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText(stall.name.toUpperCase(), stall.x + 4, stall.y + 10);
+    }
+    for (const bench of bw.benches) {
+      ctx.fillStyle = '#6d4c41';
+      ctx.fillRect(bench.x - 12, bench.y - 4, 24, 8);
+    }
+    for (const um of bw.umbrellas) {
+      ctx.fillStyle = um.color;
+      ctx.beginPath();
+      ctx.arc(um.x, um.y, 14, Math.PI, 0);
+      ctx.fill();
+      ctx.strokeStyle = '#6d4c41';
+      ctx.beginPath();
+      ctx.moveTo(um.x, um.y);
+      ctx.lineTo(um.x, um.y + 14);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#cfe3ff';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText('BOARDWALK', bw.x - 60, bw.y + bw.h - 12);
   }
 
   function drawRoads(w) {
@@ -265,6 +358,35 @@ export function createRenderer(canvas) {
     ctx.setLineDash([]);
   }
 
+  function drawShops(state) {
+    // The dealership: a showroom with a sign and a forecourt outline.
+    const d = state.economy.dealer;
+    ctx.fillStyle = '#4a5a7a';
+    ctx.fillRect(d.x, d.y, d.w, d.h);
+    ctx.fillStyle = '#ffd23d';
+    ctx.fillRect(d.x, d.y, d.w, 16);
+    ctx.fillStyle = '#111';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText('SOLMAR MOTORS — press B', d.x + 12, d.y + 13);
+    ctx.strokeStyle = '#ffd23d';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.strokeRect(d.x - 8, d.y - 8, d.w + 16, d.h + 16);
+    ctx.setLineDash([]);
+    // The ammunition store: a small shopfront with a sign.
+    const s = state.weapons.shop;
+    ctx.fillStyle = '#5a3a4a';
+    ctx.fillRect(s.x, s.y, s.w, s.h);
+    ctx.fillStyle = '#ff9ecf';
+    ctx.fillRect(s.x, s.y, s.w, 14);
+    ctx.fillStyle = '#111';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('BAY AMMO — press N', s.x + 10, s.y + 11);
+    ctx.strokeStyle = '#ff9ecf';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(s.x - 6, s.y - 6, s.w + 12, s.h + 12);
+  }
+
   function drawSkids(state) {
     ctx.fillStyle = 'rgba(20,20,20,0.4)';
     for (const car of state.cars) {
@@ -299,6 +421,28 @@ export function createRenderer(canvas) {
       ctx.fillStyle = '#7a5a00';
       ctx.font = 'bold 12px sans-serif';
       ctx.fillText('$', pkg.x - 4, pkg.y + 4);
+    }
+    // Street cash drops from the economy: green bundles, same
+    // pickup rule as the gold packages above.
+    for (const drop of state.economy.drops) {
+      if (drop.taken) continue;
+      ctx.fillStyle = '#2fd94f';
+      ctx.fillRect(drop.x - 8, drop.y - 5, 16, 10);
+      ctx.fillStyle = '#0a3d16';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText('$', drop.x - 3, drop.y + 3);
+    }
+    // Weapon pickups: dark crates with a white gun glyph.
+    for (const pickup of state.weapons.pickups) {
+      if (pickup.taken) continue;
+      ctx.fillStyle = '#3a2e4a';
+      ctx.fillRect(pickup.x - 10, pickup.y - 8, 20, 16);
+      ctx.strokeStyle = '#ffd23d';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pickup.x - 10, pickup.y - 8, 20, 16);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText(pickup.kind.toUpperCase().slice(0, 3), pickup.x - 9, pickup.y + 3);
     }
     for (const crate of state.activities.collectibles) {
       if (crate.taken) continue;
@@ -413,6 +557,25 @@ export function createRenderer(canvas) {
       ctx.moveTo(b.x - b.vx * 0.02, b.y - b.vy * 0.02);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
+    }
+    // The fishing line: a thin line from the player to the bobber,
+    // and a red-and-white bobber that bobs in the water.
+    if (state.fishing.state === 'waiting' || state.fishing.state === 'bite') {
+      const rod = state.fishing;
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(rod.bobber.x, rod.bobber.y);
+      ctx.stroke();
+      ctx.fillStyle = rod.state === 'bite' ? '#ff3b30' : '#fff';
+      ctx.beginPath();
+      ctx.arc(rod.bobber.x, rod.bobber.y, rod.state === 'bite' ? 7 : 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff3b30';
+      ctx.beginPath();
+      ctx.arc(rod.bobber.x, rod.bobber.y, 3, 0, Math.PI * 2);
+      ctx.fill();
     }
     for (const pt of state.particles) {
       ctx.globalAlpha = Math.max(0, Math.min(1, pt.life * 2));
@@ -531,7 +694,7 @@ export function createRenderer(canvas) {
     ctx.font = '20px sans-serif';
     ctx.fillStyle = '#cfe3ff';
     ctx.fillText('WASD drive / walk • Shift sprint • E enter & steal cars • Click shoot • F punch', 640, 300);
-    ctx.fillText('Q mission • R radio • G save • H horn • P pause • M mute', 640, 332);
+    ctx.fillText('Q mission • T phone • V switch gun • B dealer • N ammo shop • R radio • G save • H horn • P pause • M mute', 640, 332);
     ctx.fillStyle = '#ffd23d';
     ctx.font = 'bold 26px sans-serif';
     ctx.fillText(`Best cash: $${best}    •    Press SPACE for a new game`, 640, 392);
@@ -543,7 +706,7 @@ export function createRenderer(canvas) {
     });
     ctx.fillStyle = '#9fb4d8';
     ctx.font = '16px sans-serif';
-    ctx.fillText('10 missions, street races, deliveries, stunt jumps, a garage, day & night, rain — all original.', 640, 540);
+    ctx.fillText('14 missions, street races, deliveries, stunt jumps, bikes, a dealership, a gun shop, a phone, a garage, day & night, rain — all original.', 640, 540);
     ctx.textAlign = 'left';
   }
 
@@ -588,6 +751,7 @@ export function createRenderer(canvas) {
     drawBuildings(w);
     drawProps(w, darkness);
     drawGarage(state);
+    drawShops(state);
     drawSkids(state);
     drawMarkers(state);
     drawActors(state);

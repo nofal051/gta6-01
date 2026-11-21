@@ -109,10 +109,12 @@ export function updateBullets(state, world, dt) {
       break;
     }
     if (b.life <= 0) continue;
-    // A bullet that hits a foot cop wounds them and is spent.
+    // A bullet that hits a foot cop wounds them and is spent. The
+    // damage rides on the bullet, so a rifle round hurts more than a
+    // pistol round; old bullets without one default to pistol damage.
     for (const cop of state.police.cops) {
       if (Math.hypot(cop.x - b.x, cop.y - b.y) >= 14) continue;
-      cop.health -= BULLET_DAMAGE;
+      cop.health -= b.damage || BULLET_DAMAGE;
       b.life = 0;
       state.particles.push({ x: cop.x, y: cop.y, vx: 0, vy: -30, life: 0.4, color: '#ff5a4d', size: 5, kind: 'spark' });
       addWanted(state.player, 1, state.events);
@@ -125,7 +127,7 @@ export function updateBullets(state, world, dt) {
       const dx = Math.abs(b.x - car.x);
       const dy = Math.abs(b.y - car.y);
       if (dx >= 24 || dy >= 14) continue;
-      damageCar(state, car, BULLET_DAMAGE, null);
+      damageCar(state, car, b.damage || BULLET_DAMAGE, null);
       b.life = 0;
       break;
     }

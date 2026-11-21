@@ -22,6 +22,11 @@ import { gripFactor, updateWeather } from './weather.js';
 import { updateRadio } from './radio.js';
 import { updateActivities } from './activities.js';
 import { carInGarage } from './garage.js';
+import { updateEconomy, nearDealer } from './economy.js';
+import { updateWeapons, nearWeaponShop } from './weapons.js';
+import { updateBikes } from './bikes.js';
+import { updateFishing } from './fishing.js';
+import { updatePhone } from './phone.js';
 
 export function stepGame(state, input, audio, dt) {
   state.time += dt;
@@ -54,7 +59,19 @@ export function stepGame(state, input, audio, dt) {
   } else if (!state.garage.dismissed) {
     state.garage.menuOpen = true;
   }
-  const driveInput = state.garage.menuOpen
+  // The dealership and the ammunition store are the same idea on
+  // foot: stand by the door and the menu is open until Esc closes it.
+  // Walk away and the menu closes on its own. The phone freezes the
+  // player's hands the same way, but the city keeps moving — a call
+  // in the middle of a chase is a bad idea.
+  if (state.economy.dealer.menuOpen && !nearDealer(state.economy, state.player)) {
+    state.economy.dealer.menuOpen = false;
+  }
+  if (state.weapons.shop.menuOpen && !nearWeaponShop(state.weapons, state.player)) {
+    state.weapons.shop.menuOpen = false;
+  }
+  const handsBusy = state.phone.open || state.economy.dealer.menuOpen || state.weapons.shop.menuOpen;
+  const driveInput = state.garage.menuOpen || handsBusy
     ? { axes: () => ({ forward: 0, strafe: 0 }), isDown: () => false, mouse: input ? input.mouse : null }
     : input;
 
@@ -66,6 +83,11 @@ export function stepGame(state, input, audio, dt) {
   updateMissions(state, dt, state.rng, audio);
   updateSideWork(state, dt, state.rng, audio);
   updateActivities(state, dt, state.rng, audio);
+  updateEconomy(state, dt, audio);
+  updateWeapons(state, dt, audio);
+  updateBikes(state, input, dt);
+  updateFishing(state, dt, audio);
+  updatePhone(state, dt, input);
   updateBullets(state, state.world, dt);
   updateRadio(state.radio, audio, dt, !p.onFoot && !!p.car, state.muted);
 
@@ -73,6 +95,8 @@ export function stepGame(state, input, audio, dt) {
   if (state.muzzle && state.muzzle.life > 0) state.muzzle.life -= dt;
   if (state.saveNoticeTimer > 0) state.saveNoticeTimer -= dt;
   if (state.garage.messageTimer > 0) state.garage.messageTimer -= dt;
+  if (state.economy.dealer.messageTimer > 0) state.economy.dealer.messageTimer -= dt;
+  if (state.weapons.shop.messageTimer > 0) state.weapons.shop.messageTimer -= dt;
 
   // Running a pedestrian over at speed is a crime — once per person
   // per hit, guarded by a short cooldown on each pedestrian.
